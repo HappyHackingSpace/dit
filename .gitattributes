@@ -1,0 +1,4 @@
+model.json filter=lfs diff=lfs merge=lfs -text
+data/html/*.html filter=lfs diff=lfs merge=lfs -text
+data/index.json filter=lfs diff=lfs merge=lfs -text
+data/config.json filter=lfs diff=lfs merge=lfs -text

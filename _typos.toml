@@ -1,0 +1,8 @@
+[default.extend-identifiers]
+bannerData = "bannerData"
+
+[default.extend-words]
+hel = "hel"
+
+[files]
+extend-exclude = ["data/", "go.sum", "cmd/dit/main.go"]
