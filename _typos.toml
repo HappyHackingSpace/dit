@@ -1,0 +1,5 @@
+[default.extend-identifiers]
+bannerData = "bannerData"
+
+[files]
+extend-exclude = ["data/", "go.sum"]
