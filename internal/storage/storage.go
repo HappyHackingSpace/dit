@@ -45,9 +45,9 @@ type typeEntry struct {
 
 // indexEntry represents a single entry in index.json.
 type indexEntry struct {
-	URL                string              `json:"url"`
-	Forms              []string            `json:"forms"`
-	VisibleHTMLFields  []map[string]string `json:"visible_html_fields"`
+	URL               string              `json:"url"`
+	Forms             []string            `json:"forms"`
+	VisibleHTMLFields []map[string]string `json:"visible_html_fields"`
 }
 
 // GetConfig reads the config file.
@@ -226,17 +226,17 @@ func (s *Storage) IterAnnotations(opts IterOptions) ([]FormAnnotation, error) {
 
 			formHTML, _ := form.Html()
 			ann := FormAnnotation{
-				FormHTML:         formHTML,
-				URL:              pi.info.URL,
-				Type:             tp,
-				TypeFull:         typeFull,
-				FormIndex:        idx,
-				FieldTypes:       fieldTypes,
-				FieldTypesFull:   fieldTypesFull,
-				FormSchema:       formSchema,
-				FieldSchema:      fieldSchema,
-				FormAnnotated:    tp != formSchema.NAValue,
-				FieldsAnnotated:  fieldsAnnotated,
+				FormHTML:        formHTML,
+				URL:             pi.info.URL,
+				Type:            tp,
+				TypeFull:        typeFull,
+				FormIndex:       idx,
+				FieldTypes:      fieldTypes,
+				FieldTypesFull:  fieldTypesFull,
+				FormSchema:      formSchema,
+				FieldSchema:     fieldSchema,
+				FormAnnotated:   tp != formSchema.NAValue,
+				FieldsAnnotated: fieldsAnnotated,
 			}
 			annotations = append(annotations, ann)
 		}

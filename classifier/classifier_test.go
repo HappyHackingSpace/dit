@@ -50,15 +50,15 @@ func TestFormFeatureExtractors(t *testing.T) {
 		t.Errorf("links text = %q", linksText)
 	}
 
-	// Test FormUrl
-	fu := FormUrl{}
+	// Test FormURL
+	fu := FormURL{}
 	urlFeat := fu.ExtractString(form)
 	if urlFeat == "" {
 		t.Error("expected non-empty URL feature")
 	}
 
-	// Test FormCss
-	fc := FormCss{}
+	// Test FormCSS
+	fc := FormCSS{}
 	css := fc.ExtractString(form)
 	if !strings.Contains(css, "auth-form") {
 		t.Errorf("css = %q", css)

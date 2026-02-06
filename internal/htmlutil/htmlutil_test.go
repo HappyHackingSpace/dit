@@ -135,10 +135,10 @@ func TestGetLinksText(t *testing.T) {
 	}
 }
 
-func TestGetFormCss(t *testing.T) {
+func TestGetFormCSS(t *testing.T) {
 	doc, _ := LoadHTMLString(testHTML)
 	forms := GetForms(doc)
-	css := GetFormCss(forms[0])
+	css := GetFormCSS(forms[0])
 	if !strings.Contains(css, "auth-form") {
 		t.Errorf("css = %q, want to contain 'auth-form'", css)
 	}

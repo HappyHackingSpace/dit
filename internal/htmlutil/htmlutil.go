@@ -21,7 +21,7 @@ func LoadHTMLString(htmlStr string) (*goquery.Document, error) {
 // GetForms returns all <form> elements in the document.
 func GetForms(doc *goquery.Document) []*goquery.Selection {
 	var forms []*goquery.Selection
-	doc.Find("form").Each(func(i int, s *goquery.Selection) {
+	doc.Find("form").Each(func(_ int, s *goquery.Selection) {
 		forms = append(forms, s)
 	})
 	return forms
@@ -30,7 +30,7 @@ func GetForms(doc *goquery.Document) []*goquery.Selection {
 // GetVisibleFields returns visible form fields (textarea, select, button, non-hidden inputs).
 func GetVisibleFields(form *goquery.Selection) []*goquery.Selection {
 	var fields []*goquery.Selection
-	form.Find("textarea, select, button, input").Each(func(i int, s *goquery.Selection) {
+	form.Find("textarea, select, button, input").Each(func(_ int, s *goquery.Selection) {
 		if goquery.NodeName(s) == "input" {
 			tp, exists := s.Attr("type")
 			if exists && strings.EqualFold(tp, "hidden") {
@@ -57,7 +57,7 @@ func GetFieldsToAnnotate(form *goquery.Selection) []*goquery.Selection {
 // GetTypeCounts returns counts of different input types in a form.
 func GetTypeCounts(form *goquery.Selection) map[string]int {
 	counts := make(map[string]int)
-	form.Find("input, textarea, select").Each(func(i int, s *goquery.Selection) {
+	form.Find("input, textarea, select").Each(func(_ int, s *goquery.Selection) {
 		tag := goquery.NodeName(s)
 		switch tag {
 		case "textarea":
@@ -78,7 +78,7 @@ func GetTypeCounts(form *goquery.Selection) map[string]int {
 // GetInputCount returns the number of named input elements (matching lxml form.inputs.keys()).
 func GetInputCount(form *goquery.Selection) int {
 	seen := make(map[string]bool)
-	form.Find("input, textarea, select").Each(func(i int, s *goquery.Selection) {
+	form.Find("input, textarea, select").Each(func(_ int, s *goquery.Selection) {
 		if name, _ := s.Attr("name"); name != "" {
 			seen[name] = true
 		}
@@ -169,15 +169,15 @@ func GetInputNames(form *goquery.Selection) string {
 	return strings.Join(names, " ")
 }
 
-// GetFormCss returns the form's class and id attributes.
-func GetFormCss(form *goquery.Selection) string {
+// GetFormCSS returns the form's class and id attributes.
+func GetFormCSS(form *goquery.Selection) string {
 	class, _ := form.Attr("class")
 	id, _ := form.Attr("id")
 	return class + " " + id
 }
 
-// GetInputCss returns CSS classes and IDs of non-hidden input elements.
-func GetInputCss(form *goquery.Selection) string {
+// GetInputCSS returns CSS classes and IDs of non-hidden input elements.
+func GetInputCSS(form *goquery.Selection) string {
 	var parts []string
 	form.Find("input").Each(func(i int, s *goquery.Selection) {
 		tp, _ := s.Attr("type")
@@ -210,4 +210,3 @@ func GetInputTitles(form *goquery.Selection) string {
 func GetAllFormText(form *goquery.Selection) string {
 	return form.Text()
 }
-

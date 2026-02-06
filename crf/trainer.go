@@ -7,22 +7,22 @@ import (
 
 // TrainerConfig holds CRF training hyperparameters.
 type TrainerConfig struct {
-	C1                    float64 // L1 regularization
-	C2                    float64 // L2 regularization
-	MaxIterations         int
+	C1                     float64 // L1 regularization
+	C2                     float64 // L2 regularization
+	MaxIterations          int
 	AllPossibleTransitions bool
-	Epsilon               float64 // convergence threshold
-	Verbose               bool
+	Epsilon                float64 // convergence threshold
+	Verbose                bool
 }
 
 // DefaultTrainerConfig returns default training config matching Formasaurus.
 func DefaultTrainerConfig() TrainerConfig {
 	return TrainerConfig{
-		C1:                    0.1655,
-		C2:                    0.0236,
-		MaxIterations:         100,
+		C1:                     0.1655,
+		C2:                     0.0236,
+		MaxIterations:          100,
 		AllPossibleTransitions: true,
-		Epsilon:               1e-5,
+		Epsilon:                1e-5,
 	}
 }
 
@@ -176,16 +176,18 @@ func Train(sequences []TrainingSequence, config TrainerConfig) *Model {
 		// Compute pseudo-gradient for L1
 		pg := make([]float64, numWeights)
 		for i := range numWeights {
-			if w[i] > 0 {
+			switch {
+			case w[i] > 0:
 				pg[i] = grad[i] + config.C1
-			} else if w[i] < 0 {
+			case w[i] < 0:
 				pg[i] = grad[i] - config.C1
-			} else {
-				if grad[i]+config.C1 < 0 {
+			default:
+				switch {
+				case grad[i]+config.C1 < 0:
 					pg[i] = grad[i] + config.C1
-				} else if grad[i]-config.C1 > 0 {
+				case grad[i]-config.C1 > 0:
 					pg[i] = grad[i] - config.C1
-				} else {
+				default:
 					pg[i] = 0
 				}
 			}
@@ -333,16 +335,18 @@ func Train(sequences []TrainingSequence, config TrainerConfig) *Model {
 		// Pseudo-gradient at new point
 		newPG := make([]float64, numWeights)
 		for i := range numWeights {
-			if w[i] > 0 {
+			switch {
+			case w[i] > 0:
 				newPG[i] = newGrad[i] + config.C1
-			} else if w[i] < 0 {
+			case w[i] < 0:
 				newPG[i] = newGrad[i] - config.C1
-			} else {
-				if newGrad[i]+config.C1 < 0 {
+			default:
+				switch {
+				case newGrad[i]+config.C1 < 0:
 					newPG[i] = newGrad[i] + config.C1
-				} else if newGrad[i]-config.C1 > 0 {
+				case newGrad[i]-config.C1 > 0:
 					newPG[i] = newGrad[i] - config.C1
-				} else {
+				default:
 					newPG[i] = 0
 				}
 			}

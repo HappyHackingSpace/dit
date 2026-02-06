@@ -14,7 +14,7 @@ func ElemFeatures(elem *goquery.Selection, form *goquery.Selection) map[string]a
 	elemName := textutil.Normalize(name)
 	elemValue := normalizeAttr(elem, "value")
 	elemPlaceholder := normalizeAttr(elem, "placeholder")
-	elemCssClass := normalizeAttr(elem, "class")
+	elemCSSClass := normalizeAttr(elem, "class")
 	elemID := normalizeAttr(elem, "id")
 	elemTitle := normalizeAttr(elem, "title")
 
@@ -24,7 +24,7 @@ func ElemFeatures(elem *goquery.Selection, form *goquery.Selection) map[string]a
 		"name-ngrams-3-5":  textutil.Ngrams(elemName, 3, 5),
 		"value":            textutil.Ngrams(elemValue, 5, 5),
 		"value-ngrams":     textutil.Ngrams(elemValue, 5, 5),
-		"css-class-ngrams": textutil.Ngrams(elemCssClass, 5, 5),
+		"css-class-ngrams": textutil.Ngrams(elemCSSClass, 5, 5),
 		"help":             textutil.Tokenize(elemTitle + " " + elemPlaceholder),
 		"id-ngrams":        textutil.Ngrams(elemID, 4, 4),
 		"id":               textutil.Tokenize(elemID),

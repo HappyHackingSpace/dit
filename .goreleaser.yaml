@@ -1,7 +1,7 @@
 version: 2
 
 builds:
-  - main: ./cmd/dit
+  - dir: ./cmd/dit
     env:
       - CGO_ENABLED=0
     ldflags:

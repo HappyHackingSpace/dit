@@ -9,11 +9,17 @@ linters:
     - errcheck
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
     - gocritic
     - misspell
     - revive
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: unexported-return
+          disabled: true
 
 formatters:
   enable:

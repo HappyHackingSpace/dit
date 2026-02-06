@@ -9,10 +9,10 @@ import (
 
 // FormTypeModel holds a trained form type classifier.
 type FormTypeModel struct {
-	Classes    []string                   `json:"classes"`
-	Coef       [][]float64                `json:"coef"`       // [numClasses][numFeatures]
-	Intercept  []float64                  `json:"intercept"`  // [numClasses]
-	Pipelines  []SerializedPipeline       `json:"pipelines"`
+	Classes   []string             `json:"classes"`
+	Coef      [][]float64          `json:"coef"`      // [numClasses][numFeatures]
+	Intercept []float64            `json:"intercept"` // [numClasses]
+	Pipelines []SerializedPipeline `json:"pipelines"`
 
 	// Runtime state (not serialized directly)
 	dictVecs  []*vectorizer.DictVectorizer
@@ -24,15 +24,15 @@ type FormTypeModel struct {
 
 // SerializedPipeline holds the serialized state of a feature pipeline.
 type SerializedPipeline struct {
-	Name           string                     `json:"name"`
-	ExtractorType  string                     `json:"extractor_type"`
-	VecType        string                     `json:"vec_type"`
-	DictVec        *vectorizer.DictVectorizer  `json:"dict_vec,omitempty"`
-	CountVec       *vectorizer.CountVectorizer `json:"count_vec,omitempty"`
-	TfidfVec       *vectorizer.TfidfVectorizer `json:"tfidf_vec,omitempty"`
+	Name          string                      `json:"name"`
+	ExtractorType string                      `json:"extractor_type"`
+	VecType       string                      `json:"vec_type"`
+	DictVec       *vectorizer.DictVectorizer  `json:"dict_vec,omitempty"`
+	CountVec      *vectorizer.CountVectorizer `json:"count_vec,omitempty"`
+	TfidfVec      *vectorizer.TfidfVectorizer `json:"tfidf_vec,omitempty"`
 }
 
-// FormTypeClassify returns the predicted form type.
+// Classify returns the predicted form type.
 func (m *FormTypeModel) Classify(form *goquery.Selection) string {
 	proba := m.ClassifyProba(form)
 	bestClass := ""
@@ -182,18 +182,16 @@ func TrainFormType(forms []*goquery.Selection, labels []string, config FormTypeT
 		model.Pipelines[i] = sp
 	}
 
-	// Concatenate all feature vectors
-	N := len(forms)
-	X := make([]vectorizer.SparseVector, N)
-	for j := range N {
+	n := len(forms)
+	xData := make([]vectorizer.SparseVector, n)
+	for j := range n {
 		vectors := make([]vectorizer.SparseVector, len(pipelines))
 		for i := range pipelines {
 			vectors[i] = allVectors[i][j]
 		}
-		X[j] = vectorizer.ConcatSparse(vectors)
+		xData[j] = vectorizer.ConcatSparse(vectors)
 	}
 
-	// Build class list
 	classSet := make(map[string]int)
 	var classes []string
 	for _, l := range labels {
@@ -204,37 +202,32 @@ func TrainFormType(forms []*goquery.Selection, labels []string, config FormTypeT
 	}
 	model.Classes = classes
 
-	// Train logistic regression via L-BFGS
-	totalDim := X[0].Dim
+	totalDim := xData[0].Dim
 	numClasses := len(classes)
 
-	// Encode labels
-	y := make([]int, N)
-	for j := range N {
+	y := make([]int, n)
+	for j := range n {
 		y[j] = classSet[labels[j]]
 	}
 
-	// Logistic regression: minimize -sum(log P(y_i|x_i)) + 0.5/C * ||w||^2
-	C := config.C
-	if C <= 0 {
-		C = 5.0
+	reg := config.C
+	if reg <= 0 {
+		reg = 5.0
 	}
 
-	// Initialize weights
-	numParams := numClasses * (totalDim + 1) // +1 for intercept
+	numParams := numClasses * (totalDim + 1)
 	params := make([]float64, numParams)
 
-	// L-BFGS optimization
 	lbfgs := newLogRegLBFGS(10)
 	for iter := range config.MaxIter {
-		loss, gradients := logRegObjective(X, y, params, numClasses, totalDim, C)
+		loss, gradients := logRegObjective(xData, y, params, numClasses, totalDim, reg)
 
 		if config.Verbose && iter%10 == 0 {
 			_ = loss
 		}
 
 		dir := lbfgs.computeDirection(gradients, numParams)
-		step := logRegLineSearch(X, y, params, dir, numClasses, totalDim, C, loss)
+		step := logRegLineSearch(xData, y, params, dir, numClasses, totalDim, reg, loss)
 
 		prevParams := make([]float64, numParams)
 		copy(prevParams, params)
@@ -242,8 +235,7 @@ func TrainFormType(forms []*goquery.Selection, labels []string, config FormTypeT
 			params[i] += step * dir[i]
 		}
 
-		// Update L-BFGS memory
-		_, newGrad := logRegObjective(X, y, params, numClasses, totalDim, C)
+		_, newGrad := logRegObjective(xData, y, params, numClasses, totalDim, reg)
 		s := make([]float64, numParams)
 		yVec := make([]float64, numParams)
 		for i := range numParams {
@@ -292,56 +284,49 @@ func DefaultFormTypeTrainConfig() FormTypeTrainConfig {
 	}
 }
 
-func logRegObjective(X []vectorizer.SparseVector, y []int, params []float64, numClasses, totalDim int, C float64) (float64, []float64) {
-	N := len(X)
+func logRegObjective(x []vectorizer.SparseVector, y []int, params []float64, numClasses, totalDim int, c float64) (float64, []float64) {
+	N := len(x)
 	grad := make([]float64, len(params))
 	loss := 0.0
 
 	for j := range N {
-		// Compute logits
 		logits := make([]float64, numClasses)
-		for c := range numClasses {
-			offset := c * (totalDim + 1)
-			logits[c] = X[j].Dot(params[offset:offset+totalDim]) + params[offset+totalDim]
+		for k := range numClasses {
+			offset := k * (totalDim + 1)
+			logits[k] = x[j].Dot(params[offset:offset+totalDim]) + params[offset+totalDim]
 		}
 
-		// Softmax
 		probs := softmax(logits)
 
-		// Loss
 		if probs[y[j]] > 0 {
 			loss -= math.Log(probs[y[j]])
 		} else {
-			loss += 100 // avoid log(0)
+			loss += 100
 		}
 
-		// Gradient
-		for c := range numClasses {
-			offset := c * (totalDim + 1)
+		for k := range numClasses {
+			offset := k * (totalDim + 1)
 			indicator := 0.0
-			if c == y[j] {
+			if k == y[j] {
 				indicator = 1.0
 			}
-			diff := probs[c] - indicator
+			diff := probs[k] - indicator
 
-			// Weight gradient
-			for _, idx := range X[j].Indices {
-				for vi, vidx := range X[j].Indices {
+			for _, idx := range x[j].Indices {
+				for vi, vidx := range x[j].Indices {
 					if vidx == idx {
-						grad[offset+idx] += diff * X[j].Values[vi]
+						grad[offset+idx] += diff * x[j].Values[vi]
 						break
 					}
 				}
 			}
-			// Intercept gradient
 			grad[offset+totalDim] += diff
 		}
 	}
 
-	// L2 regularization: 0.5/C * ||w||^2
-	regCoeff := 1.0 / C
-	for c := range numClasses {
-		offset := c * (totalDim + 1)
+	regCoeff := 1.0 / c
+	for k := range numClasses {
+		offset := k * (totalDim + 1)
 		for i := range totalDim {
 			loss += 0.5 * regCoeff * params[offset+i] * params[offset+i]
 			grad[offset+i] += regCoeff * params[offset+i]
@@ -351,7 +336,7 @@ func logRegObjective(X []vectorizer.SparseVector, y []int, params []float64, num
 	return loss, grad
 }
 
-func logRegLineSearch(X []vectorizer.SparseVector, y []int, params, dir []float64, numClasses, totalDim int, C, currentLoss float64) float64 {
+func logRegLineSearch(x []vectorizer.SparseVector, y []int, params, dir []float64, numClasses, totalDim int, c, currentLoss float64) float64 {
 	step := 1.0
 	n := len(params)
 	wNew := make([]float64, n)
@@ -360,7 +345,7 @@ func logRegLineSearch(X []vectorizer.SparseVector, y []int, params, dir []float6
 		for i := range n {
 			wNew[i] = params[i] + step*dir[i]
 		}
-		newLoss, _ := logRegObjective(X, y, wNew, numClasses, totalDim, C)
+		newLoss, _ := logRegObjective(x, y, wNew, numClasses, totalDim, c)
 		if newLoss < currentLoss {
 			return step
 		}
@@ -501,12 +486,12 @@ func extractorTypeName(e FormFeatureExtractor) string {
 		return "FormLinksText"
 	case FormLabelText:
 		return "FormLabelText"
-	case FormUrl:
-		return "FormUrl"
-	case FormCss:
-		return "FormCss"
-	case FormInputCss:
-		return "FormInputCss"
+	case FormURL:
+		return "FormURL"
+	case FormCSS:
+		return "FormCSS"
+	case FormInputCSS:
+		return "FormInputCSS"
 	case FormInputNames:
 		return "FormInputNames"
 	case FormInputTitle:

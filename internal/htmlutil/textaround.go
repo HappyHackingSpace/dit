@@ -60,14 +60,6 @@ func GetTextAroundElems(root *goquery.Selection, elems []*goquery.Selection) Tex
 			result.Before[sel] = flushBuf()
 			orderedElems = append(orderedElems, sel)
 			// Add the element's tail text (text after this element)
-			if n.NextSibling != nil && n.NextSibling.Type == html.TextNode {
-				// We'll pick up the tail text when we process siblings
-			}
-			// Don't recurse into target elements — their content is not "around" text
-			// But we need to collect the tail (text after the element)
-			// In lxml model: elem.tail is text between this closing tag and next sibling's opening tag
-			// In Go html.Node model: this is the text node(s) that follow this node as siblings
-			// We handle this by collecting text from siblings in the parent's loop
 			return
 		}
 
