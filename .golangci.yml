@@ -12,6 +12,9 @@ linters:
     - gosimple
     - ineffassign
     - gocritic
-    - gofmt
     - misspell
     - revive
+
+formatters:
+  enable:
+    - gofmt
