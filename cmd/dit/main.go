@@ -8,8 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -269,6 +267,14 @@ func isTerminal() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
+func isStdinTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
 func banner() string {
 	if isTerminal() {
 		return renderColorBanner()
@@ -310,54 +316,6 @@ func initApp() {
 	}
 }
 
-const modelURL = "https://github.com/happyhackingspace/dit/raw/main/model.json"
-
-func loadOrDownloadModel(modelPath string) (*dit.Classifier, error) {
-	if modelPath != "" {
-		slog.Debug("Loading custom model", "path", modelPath)
-		return dit.Load(modelPath)
-	}
-
-	c, err := dit.New()
-	if err == nil {
-		return c, nil
-	}
-
-	// Model not found locally — download it
-	dest := filepath.Join(dit.ModelDir(), "model.json")
-	slog.Info("Model not found, downloading", "url", modelURL, "dest", dest)
-
-	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-		return nil, fmt.Errorf("create model dir: %w", err)
-	}
-
-	resp, err := http.Get(modelURL)
-	if err != nil {
-		return nil, fmt.Errorf("download model: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download model: HTTP %d", resp.StatusCode)
-	}
-
-	f, err := os.Create(dest)
-	if err != nil {
-		return nil, fmt.Errorf("create model file: %w", err)
-	}
-
-	written, err := io.Copy(f, resp.Body)
-	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(dest)
-		return nil, fmt.Errorf("download model: %w", err)
-	}
-	_ = f.Close()
-
-	slog.Info("Model downloaded", "size", fmt.Sprintf("%.1fMB", float64(written)/1024/1024))
-	return dit.Load(dest)
-}
-
 func fetchHTML(target string) (string, error) {
 	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
 		resp, err := http.Get(target)
@@ -376,6 +334,29 @@ func fetchHTML(target string) (string, error) {
 		return "", fmt.Errorf("read file: %w", err)
 	}
 	return string(data), nil
+}
+
+func readFromStdin() (string, string, error) {
+	slog.Debug("Reading from stdin")
+	body, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", "", fmt.Errorf("read stdin: %w", err)
+	}
+	content := strings.TrimSpace(string(body))
+	if content == "" {
+		return "", "", fmt.Errorf("stdin is empty")
+	}
+
+	if strings.HasPrefix(content, "http://") || strings.HasPrefix(content, "https://") {
+		slog.Debug("Stdin contains URL", "url", content)
+		html, err := fetchHTML(content)
+		if err != nil {
+			return "", "", err
+		}
+		return html, content, nil
+	}
+
+	return content, "stdin", nil
 }
 
 func main() {
@@ -428,77 +409,104 @@ func main() {
 	var runThreshold float64
 	var runProba bool
 	runCmd := &cobra.Command{
-		Use:   "run <url-or-file>",
-		Short: "Classify page type and forms in a URL or HTML file",
-		Args:  cobra.ExactArgs(1),
-		Example: `  dit run https://github.com/login
+		Use:   "run [url-or-file]",
+		Short: "Classify forms in a URL, HTML file, or stdin",
+		Args:  cobra.MaximumNArgs(1),
+		Example: `  # Classify a URL directly
+  dit run https://github.com/login
+
+  # Classify a local HTML file
   dit run login.html
+
+  # Pipe HTML content from a file
+  cat login.html | dit run
+
+  # Pipe a URL from stdin
+  echo "https://github.com/login" | dit run
+
+  # Pipe HTML content from a URL using curl
+  curl -s https://github.com/login | dit run
+
+  # Show probability scores
   dit run https://github.com/login --proba
+
+  # Use custom probability threshold
   dit run https://github.com/login --proba --threshold 0.1
-  dit run https://github.com/login --model custom.json`,
+
+  # Use custom model file
+  dit run login.html --model custom.json
+
+  # Silent mode (no banner)
+  dit run https://github.com/login -s
+
+  # Verbose mode with debug output
+  dit run https://github.com/login -v`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target := args[0]
+			var htmlContent string
+			var target string
+			var err error
+
+			if len(args) == 0 {
+				if isStdinTerminal() {
+					return cmd.Help()
+				}
+				htmlContent, target, err = readFromStdin()
+				if err != nil {
+					return err
+				}
+			} else {
+				target = args[0]
+				htmlContent, err = fetchHTML(target)
+				if err != nil {
+					return err
+				}
+			}
+			slog.Debug("HTML content ready", "target", target, "bytes", len(htmlContent))
 
 			start := time.Now()
-			c, err := loadOrDownloadModel(runModelPath)
+			var c *dit.Classifier
+			if runModelPath != "" {
+				slog.Debug("Loading custom model", "path", runModelPath)
+				c, err = dit.Load(runModelPath)
+			} else {
+				slog.Debug("Loading embedded model")
+				c, err = dit.New()
+			}
 			if err != nil {
 				return err
 			}
 			slog.Debug("Model loaded", "duration", time.Since(start))
 
-			slog.Debug("Fetching HTML", "target", target)
-			htmlContent, err := fetchHTML(target)
-			if err != nil {
-				return err
-			}
-			slog.Debug("HTML fetched", "bytes", len(htmlContent))
-
 			start = time.Now()
 			if runProba {
-				pageResult, pageErr := c.ExtractPageTypeProba(htmlContent, runThreshold)
-				if pageErr == nil {
-					slog.Debug("Page+form classification completed", "duration", time.Since(start))
-					output, _ := json.MarshalIndent(pageResult, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					// Fall back to form-only classification
-					results, err := c.ExtractFormsProba(htmlContent, runThreshold)
-					if err != nil {
-						return err
-					}
-					slog.Debug("Form classification completed", "forms", len(results), "duration", time.Since(start))
-					if len(results) == 0 {
-						fmt.Println("No forms found.")
-						return nil
-					}
-					output, _ := json.MarshalIndent(results, "", "  ")
-					fmt.Println(string(output))
+				results, err := c.ExtractFormsProba(htmlContent, runThreshold)
+				if err != nil {
+					return err
 				}
+				slog.Debug("Classification completed", "forms", len(results), "duration", time.Since(start))
+				if len(results) == 0 {
+					fmt.Println("No forms found.")
+					return nil
+				}
+				output, _ := json.MarshalIndent(results, "", "  ")
+				fmt.Println(string(output))
 			} else {
-				pageResult, pageErr := c.ExtractPageType(htmlContent)
-				if pageErr == nil {
-					slog.Debug("Page+form classification completed", "duration", time.Since(start))
-					output, _ := json.MarshalIndent(pageResult, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					// Fall back to form-only classification
-					results, err := c.ExtractForms(htmlContent)
-					if err != nil {
-						return err
-					}
-					slog.Debug("Form classification completed", "forms", len(results), "duration", time.Since(start))
-					if len(results) == 0 {
-						fmt.Println("No forms found.")
-						return nil
-					}
-					output, _ := json.MarshalIndent(results, "", "  ")
-					fmt.Println(string(output))
+				results, err := c.ExtractForms(htmlContent)
+				if err != nil {
+					return err
 				}
+				slog.Debug("Classification completed", "forms", len(results), "duration", time.Since(start))
+				if len(results) == 0 {
+					fmt.Println("No forms found.")
+					return nil
+				}
+				output, _ := json.MarshalIndent(results, "", "  ")
+				fmt.Println(string(output))
 			}
 			return nil
 		},
 	}
-	runCmd.Flags().StringVar(&runModelPath, "model", "", "Path to model file (default: auto-detect or download)")
+	runCmd.Flags().StringVar(&runModelPath, "model", "", "Path to model file (default: embedded model)")
 	runCmd.Flags().Float64Var(&runThreshold, "threshold", 0.05, "Minimum probability threshold")
 	runCmd.Flags().BoolVar(&runProba, "proba", false, "Show probabilities")
 
@@ -530,14 +538,6 @@ func main() {
 				fmt.Printf("Sequence accuracy: %.1f%% (%d/%d forms)\n",
 					result.SequenceAccuracy*100, result.SequenceCorrect, result.SequenceTotal)
 			}
-			if result.PageTotal > 0 {
-				fmt.Printf("Page type accuracy: %.1f%% (%d/%d)\n",
-					result.PageAccuracy*100, result.PageCorrect, result.PageTotal)
-				fmt.Printf("Macro F1: %.1f%%  Weighted F1: %.1f%%\n",
-					result.PageMacroF1*100, result.PageWeightedF1*100)
-				printConfusionMatrix(result.PageConfusion, result.PageClasses)
-				printClassReport(result.PageConfusion, result.PageClasses, result.PagePrecision, result.PageRecall, result.PageF1)
-			}
 			return nil
 		},
 	}
@@ -548,66 +548,5 @@ func main() {
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
-	}
-}
-
-func printClassReport(confusion map[string]map[string]int, classes []string, precision, recall, f1 map[string]float64) {
-	fmt.Printf("\nPer-class metrics:\n")
-	fmt.Printf("%8s  %6s  %6s  %6s  %7s\n", "class", "prec", "recall", "f1", "support")
-	for _, cls := range classes {
-		support := 0
-		for _, v := range confusion[cls] {
-			support += v
-		}
-		fmt.Printf("%8s  %5.1f%%  %5.1f%%  %5.1f%%  %7d\n",
-			cls, precision[cls]*100, recall[cls]*100, f1[cls]*100, support)
-	}
-}
-
-func printConfusionMatrix(confusion map[string]map[string]int, classes []string) {
-	if len(confusion) == 0 {
-		return
-	}
-
-	// Sort classes by total count descending
-	sort.Slice(classes, func(i, j int) bool {
-		ti, tj := 0, 0
-		for _, v := range confusion[classes[i]] {
-			ti += v
-		}
-		for _, v := range confusion[classes[j]] {
-			tj += v
-		}
-		return ti > tj
-	})
-
-	fmt.Printf("\nConfusion matrix (rows=true, cols=predicted):\n")
-	fmt.Printf("%8s", "")
-	for _, c := range classes {
-		fmt.Printf(" %5s", c)
-	}
-	fmt.Printf("  total  acc%%\n")
-
-	for _, trueClass := range classes {
-		fmt.Printf("%8s", trueClass)
-		total := 0
-		correct := 0
-		for _, predClass := range classes {
-			count := confusion[trueClass][predClass]
-			total += count
-			if trueClass == predClass {
-				correct = count
-			}
-			if count == 0 {
-				fmt.Printf("   %5s", ".")
-			} else {
-				fmt.Printf("   %3d", count)
-			}
-		}
-		acc := 0.0
-		if total > 0 {
-			acc = float64(correct) / float64(total) * 100
-		}
-		fmt.Printf("  %5d %5.1f\n", total, acc)
 	}
 }
