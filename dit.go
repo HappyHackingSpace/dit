@@ -52,16 +52,27 @@ type PageResultProba struct {
 }
 
 // New loads the classifier from "model.json", searching the current directory
-// and parent directories up to the module root (where go.mod lives).
+// and parent directories up to the module root, then ~/.dit/model.json.
 func New() (*Classifier, error) {
-	path, err := findModel("model.json")
+	path, err := FindModel("model.json")
 	if err != nil {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
 	return Load(path)
 }
 
-func findModel(name string) (string, error) {
+// ModelDir returns the default model storage directory (~/.dit).
+func ModelDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".dit")
+}
+
+// FindModel searches for a model file by name.
+// Search order: current dir walk-up to module root, then ~/.dit/.
+func FindModel(name string) (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -71,7 +82,6 @@ func findModel(name string) (string, error) {
 		if _, err := os.Stat(path); err == nil {
 			return path, nil
 		}
-		// Stop at module root
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			break
 		}
@@ -81,6 +91,15 @@ func findModel(name string) (string, error) {
 		}
 		dir = parent
 	}
+
+	// Check ~/.dit/
+	if modelDir := ModelDir(); modelDir != "" {
+		path := filepath.Join(modelDir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+	}
+
 	return "", fmt.Errorf("model.json not found")
 }
 

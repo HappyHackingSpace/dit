@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -309,6 +310,54 @@ func initApp() {
 	}
 }
 
+const modelURL = "https://github.com/happyhackingspace/dit/releases/latest/download/model.json"
+
+func loadOrDownloadModel(modelPath string) (*dit.Classifier, error) {
+	if modelPath != "" {
+		slog.Debug("Loading custom model", "path", modelPath)
+		return dit.Load(modelPath)
+	}
+
+	c, err := dit.New()
+	if err == nil {
+		return c, nil
+	}
+
+	// Model not found locally — download it
+	dest := filepath.Join(dit.ModelDir(), "model.json")
+	slog.Info("Model not found, downloading", "url", modelURL, "dest", dest)
+
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return nil, fmt.Errorf("create model dir: %w", err)
+	}
+
+	resp, err := http.Get(modelURL)
+	if err != nil {
+		return nil, fmt.Errorf("download model: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download model: HTTP %d", resp.StatusCode)
+	}
+
+	f, err := os.Create(dest)
+	if err != nil {
+		return nil, fmt.Errorf("create model file: %w", err)
+	}
+
+	written, err := io.Copy(f, resp.Body)
+	if err != nil {
+		_ = f.Close()
+		_ = os.Remove(dest)
+		return nil, fmt.Errorf("download model: %w", err)
+	}
+	_ = f.Close()
+
+	slog.Info("Model downloaded", "size", fmt.Sprintf("%.1fMB", float64(written)/1024/1024))
+	return dit.Load(dest)
+}
+
 func fetchHTML(target string) (string, error) {
 	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
 		resp, err := http.Get(target)
@@ -391,15 +440,7 @@ func main() {
 			target := args[0]
 
 			start := time.Now()
-			var c *dit.Classifier
-			var err error
-			if runModelPath != "" {
-				slog.Debug("Loading custom model", "path", runModelPath)
-				c, err = dit.Load(runModelPath)
-			} else {
-				slog.Debug("Loading embedded model")
-				c, err = dit.New()
-			}
+			c, err := loadOrDownloadModel(runModelPath)
 			if err != nil {
 				return err
 			}
@@ -457,7 +498,7 @@ func main() {
 			return nil
 		},
 	}
-	runCmd.Flags().StringVar(&runModelPath, "model", "", "Path to model file (default: embedded model)")
+	runCmd.Flags().StringVar(&runModelPath, "model", "", "Path to model file (default: auto-detect or download)")
 	runCmd.Flags().Float64Var(&runThreshold, "threshold", 0.05, "Minimum probability threshold")
 	runCmd.Flags().BoolVar(&runProba, "proba", false, "Show probabilities")
 
