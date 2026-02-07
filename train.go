@@ -38,6 +38,14 @@ type EvalResult struct {
 	SequenceTotal    int
 	PageCorrect      int
 	PageTotal        int
+	// Per-class metrics
+	PageConfusion  map[string]map[string]int
+	PageClasses    []string
+	PagePrecision  map[string]float64
+	PageRecall     map[string]float64
+	PageF1         map[string]float64
+	PageMacroF1    float64
+	PageWeightedF1 float64
 }
 
 // Train trains a classifier on annotated HTML forms in the given data directory.
@@ -209,6 +217,16 @@ func Evaluate(dataDir string, config *EvalConfig) (*EvalResult, error) {
 			groups := pageDomainGroups(pageAnnotations)
 			folds := groupKFold(groups, nFolds)
 
+			result.PageConfusion = make(map[string]map[string]int)
+			classSet := make(map[string]bool)
+			for _, l := range labels {
+				classSet[l] = true
+			}
+			for cls := range classSet {
+				result.PageConfusion[cls] = make(map[string]int)
+				result.PageClasses = append(result.PageClasses, cls)
+			}
+
 			for _, testIdx := range folds {
 				testSet := makeTestSet(len(docs), testIdx)
 				trainDocs, trainFormResults, trainURLs, trainLabels := filterPageByIndex(docs, formResults, urls, labels, testSet, false)
@@ -231,14 +249,18 @@ func Evaluate(dataDir string, config *EvalConfig) (*EvalResult, error) {
 
 				for _, idx := range testIdx {
 					formRes := classifyFormsOnDoc(foldFormModel, docs[idx])
-					if pageModel.Classify(docs[idx], formRes) == labels[idx] {
+					pred := pageModel.Classify(docs[idx], formRes)
+					true_ := labels[idx]
+					if pred == true_ {
 						result.PageCorrect++
 					}
+					result.PageConfusion[true_][pred]++
 					result.PageTotal++
 				}
 			}
 			if result.PageTotal > 0 {
 				result.PageAccuracy = float64(result.PageCorrect) / float64(result.PageTotal)
+				result.PagePrecision, result.PageRecall, result.PageF1, result.PageMacroF1, result.PageWeightedF1 = computeMetrics(result.PageConfusion, result.PageClasses)
 			}
 		}
 	}
@@ -440,6 +462,71 @@ func pageDomainGroups(annotations []storage.PageAnnotation) []int {
 		groups[i] = domainMap[domain]
 	}
 	return groups
+}
+
+func computeMetrics(confusion map[string]map[string]int, classes []string) (precision, recall, f1 map[string]float64, macroF1, weightedF1 float64) {
+	precision = make(map[string]float64)
+	recall = make(map[string]float64)
+	f1 = make(map[string]float64)
+
+	totalSamples := 0
+	for _, cls := range classes {
+		// TP = confusion[cls][cls]
+		tp := confusion[cls][cls]
+
+		// FP = sum of column cls minus TP
+		fp := 0
+		for _, trueCls := range classes {
+			if trueCls != cls {
+				fp += confusion[trueCls][cls]
+			}
+		}
+
+		// FN = sum of row cls minus TP
+		fn := 0
+		for _, predCls := range classes {
+			if predCls != cls {
+				fn += confusion[cls][predCls]
+			}
+		}
+
+		support := tp + fn
+		totalSamples += support
+
+		if tp+fp > 0 {
+			precision[cls] = float64(tp) / float64(tp+fp)
+		}
+		if tp+fn > 0 {
+			recall[cls] = float64(tp) / float64(tp+fn)
+		}
+		if precision[cls]+recall[cls] > 0 {
+			f1[cls] = 2 * precision[cls] * recall[cls] / (precision[cls] + recall[cls])
+		}
+	}
+
+	// Macro F1 = average F1 across classes
+	sumF1 := 0.0
+	for _, cls := range classes {
+		sumF1 += f1[cls]
+	}
+	if len(classes) > 0 {
+		macroF1 = sumF1 / float64(len(classes))
+	}
+
+	// Weighted F1 = weighted by support
+	sumWeightedF1 := 0.0
+	for _, cls := range classes {
+		support := 0
+		for _, v := range confusion[cls] {
+			support += v
+		}
+		sumWeightedF1 += f1[cls] * float64(support)
+	}
+	if totalSamples > 0 {
+		weightedF1 = sumWeightedF1 / float64(totalSamples)
+	}
+
+	return
 }
 
 func filterPageByIndex(docs []*goquery.Document, formResults [][]classifier.ClassifyResult, urls, labels []string, testSet []bool, isTest bool) ([]*goquery.Document, [][]classifier.ClassifyResult, []string, []string) {

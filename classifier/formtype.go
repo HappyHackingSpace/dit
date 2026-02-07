@@ -215,19 +215,27 @@ func TrainFormType(forms []*goquery.Selection, labels []string, config FormTypeT
 		reg = 5.0
 	}
 
+	coef, intercept := trainLogReg(xData, y, numClasses, totalDim, reg, config.MaxIter, nil)
+	model.Coef = coef
+	model.Intercept = intercept
+
+	return model
+}
+
+// trainLogReg runs L-BFGS optimization for multinomial logistic regression.
+// sampleWeights can be nil for uniform weighting.
+func trainLogReg(xData []vectorizer.SparseVector, y []int, numClasses, totalDim int, reg float64, maxIter int, sampleWeights []float64) ([][]float64, []float64) {
 	numParams := numClasses * (totalDim + 1)
 	params := make([]float64, numParams)
 
 	lbfgs := newLogRegLBFGS(10)
-	for iter := range config.MaxIter {
-		loss, gradients := logRegObjective(xData, y, params, numClasses, totalDim, reg)
-
-		if config.Verbose && iter%10 == 0 {
-			_ = loss
-		}
+	for iter := range maxIter {
+		loss, gradients := logRegObjective(xData, y, params, numClasses, totalDim, reg, sampleWeights)
+		_ = iter
+		_ = loss
 
 		dir := lbfgs.computeDirection(gradients, numParams)
-		step := logRegLineSearch(xData, y, params, dir, numClasses, totalDim, reg, loss)
+		step := logRegLineSearch(xData, y, params, dir, numClasses, totalDim, reg, loss, sampleWeights)
 
 		prevParams := make([]float64, numParams)
 		copy(prevParams, params)
@@ -235,7 +243,7 @@ func TrainFormType(forms []*goquery.Selection, labels []string, config FormTypeT
 			params[i] += step * dir[i]
 		}
 
-		_, newGrad := logRegObjective(xData, y, params, numClasses, totalDim, reg)
+		_, newGrad := logRegObjective(xData, y, params, numClasses, totalDim, reg, sampleWeights)
 		s := make([]float64, numParams)
 		yVec := make([]float64, numParams)
 		for i := range numParams {
@@ -244,7 +252,6 @@ func TrainFormType(forms []*goquery.Selection, labels []string, config FormTypeT
 		}
 		lbfgs.update(s, yVec)
 
-		// Check convergence
 		maxGrad := 0.0
 		for _, g := range newGrad {
 			if math.Abs(g) > maxGrad {
@@ -256,17 +263,16 @@ func TrainFormType(forms []*goquery.Selection, labels []string, config FormTypeT
 		}
 	}
 
-	// Extract coef and intercept
-	model.Coef = make([][]float64, numClasses)
-	model.Intercept = make([]float64, numClasses)
+	coef := make([][]float64, numClasses)
+	intercept := make([]float64, numClasses)
 	for c := range numClasses {
-		model.Coef[c] = make([]float64, totalDim)
+		coef[c] = make([]float64, totalDim)
 		offset := c * (totalDim + 1)
-		copy(model.Coef[c], params[offset:offset+totalDim])
-		model.Intercept[c] = params[offset+totalDim]
+		copy(coef[c], params[offset:offset+totalDim])
+		intercept[c] = params[offset+totalDim]
 	}
 
-	return model
+	return coef, intercept
 }
 
 // FormTypeTrainConfig holds training configuration.
@@ -284,12 +290,17 @@ func DefaultFormTypeTrainConfig() FormTypeTrainConfig {
 	}
 }
 
-func logRegObjective(x []vectorizer.SparseVector, y []int, params []float64, numClasses, totalDim int, c float64) (float64, []float64) {
+func logRegObjective(x []vectorizer.SparseVector, y []int, params []float64, numClasses, totalDim int, c float64, sampleWeights []float64) (float64, []float64) {
 	N := len(x)
 	grad := make([]float64, len(params))
 	loss := 0.0
 
 	for j := range N {
+		w := 1.0
+		if sampleWeights != nil {
+			w = sampleWeights[j]
+		}
+
 		logits := make([]float64, numClasses)
 		for k := range numClasses {
 			offset := k * (totalDim + 1)
@@ -299,9 +310,9 @@ func logRegObjective(x []vectorizer.SparseVector, y []int, params []float64, num
 		probs := softmax(logits)
 
 		if probs[y[j]] > 0 {
-			loss -= math.Log(probs[y[j]])
+			loss -= w * math.Log(probs[y[j]])
 		} else {
-			loss += 100
+			loss += w * 100
 		}
 
 		for k := range numClasses {
@@ -310,7 +321,7 @@ func logRegObjective(x []vectorizer.SparseVector, y []int, params []float64, num
 			if k == y[j] {
 				indicator = 1.0
 			}
-			diff := probs[k] - indicator
+			diff := w * (probs[k] - indicator)
 
 			for _, idx := range x[j].Indices {
 				for vi, vidx := range x[j].Indices {
@@ -336,7 +347,7 @@ func logRegObjective(x []vectorizer.SparseVector, y []int, params []float64, num
 	return loss, grad
 }
 
-func logRegLineSearch(x []vectorizer.SparseVector, y []int, params, dir []float64, numClasses, totalDim int, c, currentLoss float64) float64 {
+func logRegLineSearch(x []vectorizer.SparseVector, y []int, params, dir []float64, numClasses, totalDim int, c, currentLoss float64, sampleWeights []float64) float64 {
 	step := 1.0
 	n := len(params)
 	wNew := make([]float64, n)
@@ -345,7 +356,7 @@ func logRegLineSearch(x []vectorizer.SparseVector, y []int, params, dir []float6
 		for i := range n {
 			wNew[i] = params[i] + step*dir[i]
 		}
-		newLoss, _ := logRegObjective(x, y, wNew, numClasses, totalDim, c)
+		newLoss, _ := logRegObjective(x, y, wNew, numClasses, totalDim, c, sampleWeights)
 		if newLoss < currentLoss {
 			return step
 		}

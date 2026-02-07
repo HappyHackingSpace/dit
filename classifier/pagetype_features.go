@@ -152,6 +152,17 @@ func (e FormTypeSummaryExtractor) ExtractDict(_ *goquery.Document, formResults [
 	return features
 }
 
+// PageBodyTextExtractor extracts visible body text (first 2000 chars).
+type PageBodyTextExtractor struct{}
+
+func (e PageBodyTextExtractor) IsDict() bool { return false }
+func (e PageBodyTextExtractor) ExtractDict(_ *goquery.Document, _ []ClassifyResult) map[string]any {
+	return nil
+}
+func (e PageBodyTextExtractor) ExtractString(doc *goquery.Document, _ []ClassifyResult) string {
+	return htmlutil.GetBodyText(doc, 2000)
+}
+
 // PageURLExtractor extracts URL path patterns.
 type PageURLExtractor struct {
 	URL string // set per-document before extraction
@@ -183,6 +194,7 @@ func DefaultPageFeaturePipelines() []PageFeaturePipeline {
 		{Name: "page css", Extractor: PageCSSExtractor{}, VecType: "tfidf", NgramRange: [2]int{4, 5}, MinDF: 2, Binary: true, Analyzer: "char_wb"},
 		{Name: "page nav text", Extractor: PageNavTextExtractor{}, VecType: "tfidf", NgramRange: [2]int{1, 2}, MinDF: 2, Binary: true, Analyzer: "word"},
 		{Name: "form type summary", Extractor: FormTypeSummaryExtractor{}, VecType: "dict"},
+		{Name: "page body text", Extractor: PageBodyTextExtractor{}, VecType: "tfidf", NgramRange: [2]int{1, 2}, MinDF: 3, Binary: true, Analyzer: "word", UseEnglishStop: true},
 		{Name: "page url", Extractor: PageURLExtractor{}, VecType: "tfidf", NgramRange: [2]int{5, 6}, MinDF: 2, Binary: true, Analyzer: "char_wb"},
 	}
 }

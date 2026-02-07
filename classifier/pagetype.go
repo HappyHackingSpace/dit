@@ -1,8 +1,6 @@
 package classifier
 
 import (
-	"math"
-
 	"github.com/PuerkitoBio/goquery"
 	"github.com/happyhackingspace/dit/internal/vectorizer"
 )
@@ -23,16 +21,18 @@ type PageTypeModel struct {
 
 // PageTypeTrainConfig holds training configuration for the page type model.
 type PageTypeTrainConfig struct {
-	C       float64
-	MaxIter int
-	Verbose bool
+	C            float64
+	MaxIter      int
+	Verbose      bool
+	BalanceClass bool // use balanced class weights
 }
 
 // DefaultPageTypeTrainConfig returns default training config.
 func DefaultPageTypeTrainConfig() PageTypeTrainConfig {
 	return PageTypeTrainConfig{
-		C:       5.0,
-		MaxIter: 100,
+		C:            5.0,
+		MaxIter:      100,
+		BalanceClass: true,
 	}
 }
 
@@ -202,54 +202,30 @@ func TrainPageType(docs []*goquery.Document, formResults [][]ClassifyResult, url
 		reg = 5.0
 	}
 
-	numParams := numClasses * (totalDim + 1)
-	params := make([]float64, numParams)
-
-	lbfgs := newLogRegLBFGS(10)
-	for iter := range config.MaxIter {
-		loss, gradients := logRegObjective(xData, y, params, numClasses, totalDim, reg)
-
-		if config.Verbose && iter%10 == 0 {
-			_ = loss
+	// Compute balanced class weights: n_samples / (n_classes * n_per_class)
+	var sampleWeights []float64
+	if config.BalanceClass {
+		classCounts := make([]int, numClasses)
+		for _, yi := range y {
+			classCounts[yi]++
 		}
-
-		dir := lbfgs.computeDirection(gradients, numParams)
-		step := logRegLineSearch(xData, y, params, dir, numClasses, totalDim, reg, loss)
-
-		prevParams := make([]float64, numParams)
-		copy(prevParams, params)
-		for i := range numParams {
-			params[i] += step * dir[i]
-		}
-
-		_, newGrad := logRegObjective(xData, y, params, numClasses, totalDim, reg)
-		s := make([]float64, numParams)
-		yVec := make([]float64, numParams)
-		for i := range numParams {
-			s[i] = params[i] - prevParams[i]
-			yVec[i] = newGrad[i] - gradients[i]
-		}
-		lbfgs.update(s, yVec)
-
-		maxGrad := 0.0
-		for _, g := range newGrad {
-			if math.Abs(g) > maxGrad {
-				maxGrad = math.Abs(g)
+		classWeights := make([]float64, numClasses)
+		for c := range numClasses {
+			if classCounts[c] > 0 {
+				classWeights[c] = float64(n) / (float64(numClasses) * float64(classCounts[c]))
+			} else {
+				classWeights[c] = 1.0
 			}
 		}
-		if maxGrad < 1e-5 {
-			break
+		sampleWeights = make([]float64, n)
+		for j := range n {
+			sampleWeights[j] = classWeights[y[j]]
 		}
 	}
 
-	model.Coef = make([][]float64, numClasses)
-	model.Intercept = make([]float64, numClasses)
-	for c := range numClasses {
-		model.Coef[c] = make([]float64, totalDim)
-		offset := c * (totalDim + 1)
-		copy(model.Coef[c], params[offset:offset+totalDim])
-		model.Intercept[c] = params[offset+totalDim]
-	}
+	coef, intercept := trainLogReg(xData, y, numClasses, totalDim, reg, config.MaxIter, sampleWeights)
+	model.Coef = coef
+	model.Intercept = intercept
 
 	return model
 }
@@ -272,6 +248,8 @@ func pageExtractorTypeName(e PageFeatureExtractor) string {
 		return "PageNavText"
 	case FormTypeSummaryExtractor:
 		return "FormTypeSummary"
+	case PageBodyTextExtractor:
+		return "PageBodyText"
 	case PageURLExtractor:
 		return "PageURL"
 	default:

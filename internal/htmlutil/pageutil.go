@@ -84,6 +84,18 @@ func GetPageLinkTexts(doc *goquery.Document) string {
 	return strings.Join(parts, " ")
 }
 
+// GetBodyText returns visible text from the body, truncated for feature extraction.
+func GetBodyText(doc *goquery.Document, maxLen int) string {
+	text := strings.TrimSpace(doc.Find("body").Text())
+	// Collapse whitespace
+	fields := strings.Fields(text)
+	text = strings.Join(fields, " ")
+	if maxLen > 0 && len(text) > maxLen {
+		text = text[:maxLen]
+	}
+	return text
+}
+
 // GetPageCSS returns class and id attributes from <body> and <main> elements.
 func GetPageCSS(doc *goquery.Document) string {
 	var parts []string
