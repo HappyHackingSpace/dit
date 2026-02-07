@@ -9,7 +9,7 @@ It detects whether a form is a login, search, registration, password recovery, c
 ## Install
 
 ```bash
-go get github.com/happyhackingspace/dit
+go install github.com/happyhackingspace/dit@latest
 ```
 
 ## Usage
