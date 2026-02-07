@@ -53,6 +53,9 @@ dit run login.html
 # With probabilities
 dit run https://github.com/login --proba
 
+# Use render browser for JavaScript-rendered pages
+dit run https://github.com/login --render
+
 # Train a model
 dit train model.json --data-folder data
 
