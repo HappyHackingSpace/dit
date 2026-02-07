@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/creativeprojects/go-selfupdate"
 	"github.com/happyhackingspace/dit"
 	"github.com/spf13/cobra"
 )
@@ -544,11 +546,78 @@ func main() {
 	evalCmd.Flags().StringVar(&evalDataFolder, "data-folder", "data", "Path to annotation data folder")
 	evalCmd.Flags().IntVar(&evalCVFolds, "cv", 10, "Number of cross-validation folds")
 
-	rootCmd.AddCommand(trainCmd, runCmd, evalCmd)
+	upCmd := &cobra.Command{
+		Use:   "up",
+		Short: "Self-update to the latest version",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return selfUpdate()
+		},
+	}
+
+	rootCmd.AddCommand(trainCmd, runCmd, evalCmd, upCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func selfUpdate() error {
+	v := version
+	if v == "dev" {
+		v = "0.0.0"
+	}
+
+	updater, err := selfupdate.NewUpdater(selfupdate.Config{})
+	if err != nil {
+		return err
+	}
+
+	latest, found, err := updater.DetectLatest(context.Background(), selfupdate.ParseSlug("happyhackingspace/dit"))
+	if err != nil {
+		return fmt.Errorf("detect latest version: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("no release found")
+	}
+
+	if latest.LessOrEqual(v) {
+		fmt.Printf("Already up to date (%s)\n", version)
+		return nil
+	}
+
+	slog.Info("Updating", "from", version, "to", latest.Version())
+
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	if err := updater.UpdateTo(context.Background(), latest, exe); err != nil {
+		return fmt.Errorf("update: %w", err)
+	}
+
+	fmt.Printf("Updated to %s\n", latest.Version())
+
+	// Also refresh cached model
+	modelDest := filepath.Join(dit.ModelDir(), "model.json")
+	if _, err := os.Stat(modelDest); err == nil {
+		slog.Info("Updating cached model")
+		modelResp, err := http.Get(modelURL)
+		if err == nil {
+			defer func() { _ = modelResp.Body.Close() }()
+			if modelResp.StatusCode == http.StatusOK {
+				if err := os.MkdirAll(filepath.Dir(modelDest), 0755); err == nil {
+					if f, err := os.Create(modelDest); err == nil {
+						_, _ = io.Copy(f, modelResp.Body)
+						_ = f.Close()
+						slog.Info("Model updated")
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func printClassReport(confusion map[string]map[string]int, classes []string, precision, recall, f1 map[string]float64) {
