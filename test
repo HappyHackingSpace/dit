@@ -1,0 +1,4 @@
+echo https://github.com/login | go run cmd/dit/main.go run --proba
+cat test.html | go run cmd/dit/main.go run --proba  
+
+ cat test.html | go run cmd/dit/main.go run --proba 

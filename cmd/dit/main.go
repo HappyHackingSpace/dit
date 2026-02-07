@@ -267,6 +267,14 @@ func isTerminal() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
+func isStdinTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
 func banner() string {
 	if isTerminal() {
 		return renderColorBanner()
@@ -328,6 +336,29 @@ func fetchHTML(target string) (string, error) {
 	return string(data), nil
 }
 
+func readFromStdin() (string, string, error) {
+	slog.Debug("Reading from stdin")
+	body, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", "", fmt.Errorf("read stdin: %w", err)
+	}
+	content := strings.TrimSpace(string(body))
+	if content == "" {
+		return "", "", fmt.Errorf("stdin is empty")
+	}
+
+	if strings.HasPrefix(content, "http://") || strings.HasPrefix(content, "https://") {
+		slog.Debug("Stdin contains URL", "url", content)
+		html, err := fetchHTML(content)
+		if err != nil {
+			return "", "", err
+		}
+		return html, content, nil
+	}
+
+	return content, "stdin", nil
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "dît",
@@ -378,20 +409,62 @@ func main() {
 	var runThreshold float64
 	var runProba bool
 	runCmd := &cobra.Command{
-		Use:   "run <url-or-file>",
-		Short: "Classify forms in a URL or HTML file",
-		Args:  cobra.ExactArgs(1),
-		Example: `  dit run https://github.com/login
+		Use:   "run [url-or-file]",
+		Short: "Classify forms in a URL, HTML file, or stdin",
+		Args:  cobra.MaximumNArgs(1),
+		Example: `  # Classify a URL directly
+  dit run https://github.com/login
+
+  # Classify a local HTML file
   dit run login.html
+
+  # Pipe HTML content from a file
+  cat login.html | dit run
+
+  # Pipe a URL from stdin
+  echo "https://github.com/login" | dit run
+
+  # Pipe HTML content from a URL using curl
+  curl -s https://github.com/login | dit run
+
+  # Show probability scores
   dit run https://github.com/login --proba
+
+  # Use custom probability threshold
   dit run https://github.com/login --proba --threshold 0.1
-  dit run https://github.com/login --model custom.json`,
+
+  # Use custom model file
+  dit run login.html --model custom.json
+
+  # Silent mode (no banner)
+  dit run https://github.com/login -s
+
+  # Verbose mode with debug output
+  dit run https://github.com/login -v`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target := args[0]
+			var htmlContent string
+			var target string
+			var err error
+
+			if len(args) == 0 {
+				if isStdinTerminal() {
+					return cmd.Help()
+				}
+				htmlContent, target, err = readFromStdin()
+				if err != nil {
+					return err
+				}
+			} else {
+				target = args[0]
+				htmlContent, err = fetchHTML(target)
+				if err != nil {
+					return err
+				}
+			}
+			slog.Debug("HTML content ready", "target", target, "bytes", len(htmlContent))
 
 			start := time.Now()
 			var c *dit.Classifier
-			var err error
 			if runModelPath != "" {
 				slog.Debug("Loading custom model", "path", runModelPath)
 				c, err = dit.Load(runModelPath)
@@ -403,13 +476,6 @@ func main() {
 				return err
 			}
 			slog.Debug("Model loaded", "duration", time.Since(start))
-
-			slog.Debug("Fetching HTML", "target", target)
-			htmlContent, err := fetchHTML(target)
-			if err != nil {
-				return err
-			}
-			slog.Debug("HTML fetched", "bytes", len(htmlContent))
 
 			start = time.Now()
 			if runProba {
