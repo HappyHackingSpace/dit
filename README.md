@@ -60,11 +60,45 @@ dit run login.html
 # With probabilities
 dit run https://github.com/login --proba
 
+# Process multiple URLs from a file (one URL per line)
+dit run --list urls.txt
+
+# Batch processing with probabilities
+dit run --list urls.txt --proba
+
 # Train a model
 dit train model.json --data-folder data
 
 # Evaluate model accuracy
 dit evaluate --data-folder data
+
+#### Batch Processing
+
+Process multiple URLs from a file for efficient batch classification:
+
+```bash
+# Create a file with URLs (one per line)
+cat > urls.txt << EOF
+# Comments are supported
+https://github.com/login
+https://github.com/signup
+https://github.com/password_reset
+EOF
+
+# Process all URLs and stream results as JSON lines
+dit run --list urls.txt --silent
+
+# Pretty print with jq
+dit run --list urls.txt --silent | jq '.'
+
+# Extract just URLs and page types
+dit run --list urls.txt --silent | jq -r '"\(.url) -> \(.page.type)"'
+
+# Filter specific page types
+dit run --list urls.txt --silent | jq 'select(.page.type == "login")'
+```
+
+**Output format**: Results are streamed as [JSON Lines](https://jsonlines.org/) (one JSON object per line), making it easy to process with standard Unix tools.
 ```
 
 ## Page Types

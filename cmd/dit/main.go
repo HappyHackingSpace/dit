@@ -380,6 +380,117 @@ func fetchHTML(target string) (string, error) {
 	return string(data), nil
 }
 
+func processURLList(c *dit.Classifier, listFile string, proba bool, threshold float64) error {
+	//Read the file
+	data, err := os.ReadFile(listFile)
+	if err != nil {
+		return fmt.Errorf("read list file: %w", err)
+	}
+
+	//Parse urls from the file(one per line)
+	lines := strings.Split(string(data), "\n")
+	urls := make([]string, 0)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		urls = append(urls, line)
+	}
+
+	if len(urls) == 0 {
+		return fmt.Errorf("no URLs found in the list file %s", listFile)
+	}
+
+	slog.Info("Processing URLs","count",len(urls), "source", listFile)
+
+	//Process each URL
+	for _, url := range urls {
+		slog.Debug("Processing URL", "url", url)
+		htmlContent, err := fetchHTML(url)
+		if err != nil {
+			slog.Warn("Failed to fetch HTML", "url", url, "error", err)
+			result := map[string]interface{}{
+				"url": url,
+				"error": err.Error(),
+			}
+			output, _ := json.Marshal(result)
+			fmt.Println(string(output))
+			continue
+		}
+		
+		// Classify the HTML
+		start := time.Now()
+		if proba {
+			// Try page classification first
+			pageResult, pageErr := c.ExtractPageTypeProba(htmlContent, threshold)
+			if pageErr == nil {
+				slog.Debug("Page classification completed", "url", url, "duration", time.Since(start))
+				result := map[string]interface{}{
+					"url":  url,
+					"page": pageResult,
+				}
+				output, _ := json.Marshal(result)
+				fmt.Println(string(output))
+			} else {
+				// Fall back to form-only classification
+				formResults, formErr := c.ExtractFormsProba(htmlContent, threshold)
+				if formErr != nil {
+					slog.Warn("Classification failed", "url", url, "error", formErr)
+					result := map[string]interface{}{
+						"url":   url,
+						"error": formErr.Error(),
+					}
+					output, _ := json.Marshal(result)
+					fmt.Println(string(output))
+				} else {
+					slog.Debug("Form classification completed", "url", url, "forms", len(formResults), "duration", time.Since(start))
+					result := map[string]interface{}{
+						"url":   url,
+						"forms": formResults,
+					}
+					output, _ := json.Marshal(result)
+					fmt.Println(string(output))
+				}
+			}
+		} else {
+			// Try page classification first
+			pageResult, pageErr := c.ExtractPageType(htmlContent)
+			if pageErr == nil {
+				slog.Debug("Page classification completed", "url", url, "duration", time.Since(start))
+				result := map[string]interface{}{
+					"url":  url,
+					"page": pageResult,
+				}
+				output, _ := json.Marshal(result)
+				fmt.Println(string(output))
+			} else {
+				// Fall back to form-only classification
+				formResults, formErr := c.ExtractForms(htmlContent)
+				if formErr != nil {
+					slog.Warn("Classification failed", "url", url, "error", formErr)
+					result := map[string]interface{}{
+						"url":   url,
+						"error": formErr.Error(),
+					}
+					output, _ := json.Marshal(result)
+					fmt.Println(string(output))
+				} else {
+					slog.Debug("Form classification completed", "url", url, "forms", len(formResults), "duration", time.Since(start))
+					result := map[string]interface{}{
+						"url":   url,
+						"forms": formResults,
+					}
+					output, _ := json.Marshal(result)
+					fmt.Println(string(output))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "dît",
@@ -429,17 +540,18 @@ func main() {
 	var runModelPath string
 	var runThreshold float64
 	var runProba bool
+	var runListFile string
 	runCmd := &cobra.Command{
 		Use:   "run <url-or-file>",
 		Short: "Classify page type and forms in a URL or HTML file",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		Example: `  dit run https://github.com/login
   dit run login.html
   dit run https://github.com/login --proba
   dit run https://github.com/login --proba --threshold 0.1
-  dit run https://github.com/login --model custom.json`,
+  dit run https://github.com/login --model custom.json
+  dit run --list urls.txt`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target := args[0]
 
 			start := time.Now()
 			c, err := loadOrDownloadModel(runModelPath)
@@ -447,6 +559,17 @@ func main() {
 				return err
 			}
 			slog.Debug("Model loaded", "duration", time.Since(start))
+
+			//Check if list flag is provided
+			if runListFile != "" {
+				return processURLList(c, runListFile, runProba, runThreshold)
+			}
+
+			//Handle single target
+			if len(args) == 0 {
+				return fmt.Errorf("either provide a URL/file or use --list flag")
+			}
+			target := args[0]
 
 			slog.Debug("Fetching HTML", "target", target)
 			htmlContent, err := fetchHTML(target)
@@ -503,6 +626,7 @@ func main() {
 	runCmd.Flags().StringVar(&runModelPath, "model", "", "Path to model file (default: auto-detect or download)")
 	runCmd.Flags().Float64Var(&runThreshold, "threshold", 0.05, "Minimum probability threshold")
 	runCmd.Flags().BoolVar(&runProba, "proba", false, "Show probabilities")
+	runCmd.Flags().StringVar(&runListFile, "list", "", "File containing a list of URLs to classify")
 
 	var evalDataFolder string
 	var evalCVFolds int
