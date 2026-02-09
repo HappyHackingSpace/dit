@@ -5,4 +5,4 @@ bannerData = "bannerData"
 hel = "hel"
 
 [files]
-extend-exclude = ["data/", "go.sum", "cmd/dit/main.go"]
+extend-exclude = ["data/", "go.sum", "internal/banner/banner.go"]
