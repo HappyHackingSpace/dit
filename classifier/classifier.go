@@ -16,14 +16,16 @@ type FormFieldClassifier struct {
 
 // ClassifyResult holds the classification result for a form.
 type ClassifyResult struct {
-	Form   string            `json:"form"`
-	Fields map[string]string `json:"fields,omitempty"`
+	Form    string            `json:"form"`
+	Captcha string            `json:"captcha,omitempty"`
+	Fields  map[string]string `json:"fields,omitempty"`
 }
 
 // ClassifyProbaResult holds probability-based classification results.
 type ClassifyProbaResult struct {
-	Form   map[string]float64            `json:"form"`
-	Fields map[string]map[string]float64 `json:"fields,omitempty"`
+	Form    map[string]float64            `json:"form"`
+	Captcha string                        `json:"captcha,omitempty"`
+	Fields  map[string]map[string]float64 `json:"fields,omitempty"`
 }
 
 // Classify returns the form type and field types.
@@ -31,7 +33,14 @@ func (c *FormFieldClassifier) Classify(form *goquery.Selection, fields bool) Cla
 	formType := c.FormModel.Classify(form)
 	result := ClassifyResult{Form: formType}
 	if fields && c.FieldModel != nil {
-		result.Fields = c.FieldModel.Classify(form, formType)
+		allFields := c.FieldModel.Classify(form, formType)
+		// Exclude fields classified as "captcha" since captcha is now detected at page level
+		result.Fields = make(map[string]string)
+		for name, fieldType := range allFields {
+			if fieldType != "captcha" {
+				result.Fields[name] = fieldType
+			}
+		}
 	}
 	return result
 }
@@ -55,7 +64,12 @@ func (c *FormFieldClassifier) ClassifyProba(form *goquery.Selection, threshold f
 		fieldProba := c.FieldModel.ClassifyProba(form, bestFormType)
 		result.Fields = make(map[string]map[string]float64)
 		for name, probs := range fieldProba {
-			result.Fields[name] = thresholdMap(probs, threshold)
+			// Check if this field is classified as captcha (before thresholding)
+			if _, isCaptcha := probs["captcha"]; !isCaptcha {
+				// Only include if NOT a captcha field
+				thresholdedProbs := thresholdMap(probs, threshold)
+				result.Fields[name] = thresholdedProbs
+			}
 		}
 	}
 
@@ -86,6 +100,16 @@ func (c *FormFieldClassifier) ExtractPage(htmlStr string, proba bool, threshold 
 	formResults := make([]FormResult, len(forms))
 	var classifyResults []ClassifyResult
 
+	// Detect CAPTCHA at page level (first occurrence across all forms)
+	var pageCaptcha string
+	detector := &CaptchaDetector{}
+	for _, form := range forms {
+		captchaType := detector.DetectInForm(form)
+		if captchaType != CaptchaTypeNone && pageCaptcha == "" {
+			pageCaptcha = string(captchaType)
+		}
+	}
+
 	for i, form := range forms {
 		formResults[i].FormHTML, _ = form.Html()
 		if proba {
@@ -101,12 +125,14 @@ func (c *FormFieldClassifier) ExtractPage(htmlStr string, proba bool, threshold 
 	if c.PageModel != nil {
 		if proba {
 			pageProba = ClassifyProbaResult{
-				Form: c.PageModel.ClassifyProba(doc, classifyResults),
+				Form:    c.PageModel.ClassifyProba(doc, classifyResults),
+				Captcha: pageCaptcha,
 			}
 			pageProba.Form = thresholdMap(pageProba.Form, threshold)
 		} else {
 			pageResult = ClassifyResult{
-				Form: c.PageModel.Classify(doc, classifyResults),
+				Form:    c.PageModel.Classify(doc, classifyResults),
+				Captcha: pageCaptcha,
 			}
 		}
 	}

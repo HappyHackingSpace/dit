@@ -29,26 +29,30 @@ type Classifier struct {
 
 // FormResult holds the classification result for a single form.
 type FormResult struct {
-	Type   string            `json:"type"`
-	Fields map[string]string `json:"fields,omitempty"`
+	Type    string            `json:"type"`
+	Captcha string            `json:"captcha,omitempty"`
+	Fields  map[string]string `json:"fields,omitempty"`
 }
 
 // FormResultProba holds probability-based classification results for a single form.
 type FormResultProba struct {
-	Type   map[string]float64            `json:"type"`
-	Fields map[string]map[string]float64 `json:"fields,omitempty"`
+	Type    map[string]float64            `json:"type"`
+	Captcha string                        `json:"captcha,omitempty"`
+	Fields  map[string]map[string]float64 `json:"fields,omitempty"`
 }
 
 // PageResult holds the page type classification result.
 type PageResult struct {
-	Type  string       `json:"type"`
-	Forms []FormResult `json:"forms,omitempty"`
+	Type    string       `json:"type"`
+	Captcha string       `json:"captcha,omitempty"`
+	Forms   []FormResult `json:"forms,omitempty"`
 }
 
 // PageResultProba holds probability-based page type classification results.
 type PageResultProba struct {
-	Type  map[string]float64 `json:"type"`
-	Forms []FormResultProba  `json:"forms,omitempty"`
+	Type    map[string]float64 `json:"type"`
+	Captcha string             `json:"captcha,omitempty"`
+	Forms   []FormResultProba  `json:"forms,omitempty"`
 }
 
 // New loads the classifier from "model.json", searching the current directory
@@ -190,8 +194,9 @@ func (c *Classifier) ExtractPageType(html string) (*PageResult, error) {
 	}
 
 	return &PageResult{
-		Type:  pageResult.Form,
-		Forms: forms,
+		Type:    pageResult.Form,
+		Captcha: pageResult.Captcha,
+		Forms:   forms,
 	}, nil
 }
 
@@ -218,7 +223,8 @@ func (c *Classifier) ExtractPageTypeProba(html string, threshold float64) (*Page
 	}
 
 	return &PageResultProba{
-		Type:  pageProba.Form,
-		Forms: forms,
+		Type:    pageProba.Form,
+		Captcha: pageProba.Captcha,
+		Forms:   forms,
 	}, nil
 }
