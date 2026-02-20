@@ -1,8 +1,9 @@
-package classifier
+package captcha_test
 
 import (
 	"testing"
 
+	"github.com/happyhackingspace/dit/captcha"
 	"github.com/happyhackingspace/dit/internal/htmlutil"
 )
 
@@ -25,10 +26,10 @@ func TestDetectRecaptchaV2(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeRecaptcha {
+	if result != captcha.CaptchaTypeRecaptcha {
 		t.Errorf("expected recaptcha, got %v", result)
 	}
 }
@@ -51,10 +52,10 @@ func TestDetectRecaptchaScript(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeRecaptcha {
+	if result != captcha.CaptchaTypeRecaptcha {
 		t.Errorf("expected recaptcha, got %v", result)
 	}
 }
@@ -77,10 +78,10 @@ func TestDetectHCaptcha(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeHCaptcha {
+	if result != captcha.CaptchaTypeHCaptcha {
 		t.Errorf("expected hcaptcha, got %v", result)
 	}
 }
@@ -103,10 +104,10 @@ func TestDetectHCaptchaScript(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeHCaptcha {
+	if result != captcha.CaptchaTypeHCaptcha {
 		t.Errorf("expected hcaptcha, got %v", result)
 	}
 }
@@ -129,10 +130,10 @@ func TestDetectTurnstile(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTurnstile {
+	if result != captcha.CaptchaTypeTurnstile {
 		t.Errorf("expected turnstile, got %v", result)
 	}
 }
@@ -155,10 +156,10 @@ func TestDetectTurnstileScript(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTurnstile {
+	if result != captcha.CaptchaTypeTurnstile {
 		t.Errorf("expected turnstile, got %v", result)
 	}
 }
@@ -182,10 +183,10 @@ func TestDetectGeetest(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeGeetest {
+	if result != captcha.CaptchaTypeGeetest {
 		t.Errorf("expected geetest, got %v", result)
 	}
 }
@@ -208,10 +209,10 @@ func TestDetectFriendlyCaptcha(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeFriendlyCaptcha {
+	if result != captcha.CaptchaTypeFriendlyCaptcha {
 		t.Errorf("expected friendlycaptcha, got %v", result)
 	}
 }
@@ -234,10 +235,10 @@ func TestDetectNoCaptcha(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeNone {
+	if result != captcha.CaptchaTypeNone {
 		t.Errorf("expected no captcha, got %v", result)
 	}
 }
@@ -260,11 +261,11 @@ func TestDetectGenericCaptchaIframe(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
 	// Should detect as generic captcha or none (depending on iframe content)
-	if result == CaptchaTypeRecaptcha || result == CaptchaTypeHCaptcha {
+	if result == captcha.CaptchaTypeRecaptcha || result == captcha.CaptchaTypeHCaptcha {
 		t.Errorf("expected generic/none, got %v", result)
 	}
 }
@@ -296,15 +297,15 @@ func TestDetectCaptchaInMultipleForms(t *testing.T) {
 		t.Fatalf("expected 2 forms, got %d", len(forms))
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 
 	result1 := detector.DetectInForm(forms[0])
-	if result1 != CaptchaTypeRecaptcha {
+	if result1 != captcha.CaptchaTypeRecaptcha {
 		t.Errorf("form 1: expected recaptcha, got %v", result1)
 	}
 
 	result2 := detector.DetectInForm(forms[1])
-	if result2 != CaptchaTypeHCaptcha {
+	if result2 != captcha.CaptchaTypeHCaptcha {
 		t.Errorf("form 2: expected hcaptcha, got %v", result2)
 	}
 }
@@ -320,8 +321,8 @@ func TestDetectCaptchaInHTML(t *testing.T) {
   </body>
 </html>
 `
-	result1 := DetectCaptchaInHTML(html1)
-	if result1 != CaptchaTypeRecaptcha {
+	result1 := captcha.DetectCaptchaInHTML(html1)
+	if result1 != captcha.CaptchaTypeRecaptcha {
 		t.Errorf("expected recaptcha, got %v", result1)
 	}
 
@@ -335,8 +336,8 @@ func TestDetectCaptchaInHTML(t *testing.T) {
   </body>
 </html>
 `
-	result2 := DetectCaptchaInHTML(html2)
-	if result2 != CaptchaTypeHCaptcha {
+	result2 := captcha.DetectCaptchaInHTML(html2)
+	if result2 != captcha.CaptchaTypeHCaptcha {
 		t.Errorf("expected hcaptcha, got %v", result2)
 	}
 
@@ -350,8 +351,8 @@ func TestDetectCaptchaInHTML(t *testing.T) {
   </body>
 </html>
 `
-	result3 := DetectCaptchaInHTML(html3)
-	if result3 != CaptchaTurnstile {
+	result3 := captcha.DetectCaptchaInHTML(html3)
+	if result3 != captcha.CaptchaTypeTurnstile {
 		t.Errorf("expected turnstile, got %v", result3)
 	}
 
@@ -371,24 +372,24 @@ func TestDetectCaptchaInHTML(t *testing.T) {
   </body>
 </html>
 `
-	resultMultiple := DetectCaptchaInHTML(htmlMultiple)
-	if resultMultiple == CaptchaTypeNone {
+	resultMultiple := captcha.DetectCaptchaInHTML(htmlMultiple)
+	if resultMultiple == captcha.CaptchaTypeNone {
 		t.Error("expected to detect at least one captcha")
 	}
 }
 
 func TestCaptchaTypeString(t *testing.T) {
 	tests := []struct {
-		ct       CaptchaType
+		ct       captcha.CaptchaType
 		expected string
 	}{
-		{CaptchaTypeNone, "none"},
-		{CaptchaTypeRecaptcha, "recaptcha"},
-		{CaptchaTypeHCaptcha, "hcaptcha"},
-		{CaptchaTurnstile, "turnstile"},
-		{CaptchaTypeGeetest, "geetest"},
-		{CaptchaTypeFriendlyCaptcha, "friendlycaptcha"},
-		{CaptchaTypeOther, "other"},
+		{captcha.CaptchaTypeNone, "none"},
+		{captcha.CaptchaTypeRecaptcha, "recaptcha"},
+		{captcha.CaptchaTypeHCaptcha, "hcaptcha"},
+		{captcha.CaptchaTypeTurnstile, "turnstile"},
+		{captcha.CaptchaTypeGeetest, "geetest"},
+		{captcha.CaptchaTypeFriendlyCaptcha, "friendlycaptcha"},
+		{captcha.CaptchaTypeOther, "other"},
 	}
 
 	for _, test := range tests {
@@ -416,7 +417,7 @@ func TestIsValidCaptchaType(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := IsValidCaptchaType(test.input)
+		result := captcha.IsValidCaptchaType(test.input)
 		if result != test.expected {
 			t.Errorf("IsValidCaptchaType(%q): expected %v, got %v", test.input, test.expected, result)
 		}
@@ -441,10 +442,10 @@ func TestDetectRecaptchaV3(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeRecaptcha {
+	if result != captcha.CaptchaTypeRecaptcha {
 		t.Errorf("expected recaptcha, got %v", result)
 	}
 }
@@ -469,11 +470,11 @@ func TestDetectMultipleCaptchasInOneForm(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
 	// Should detect the first CAPTCHA found (recaptcha comes first)
-	if result != CaptchaTypeRecaptcha && result != CaptchaTypeHCaptcha {
+	if result != captcha.CaptchaTypeRecaptcha && result != captcha.CaptchaTypeHCaptcha {
 		t.Errorf("expected recaptcha or hcaptcha, got %v", result)
 	}
 }
@@ -499,10 +500,10 @@ func TestDetectRotateCaptcha(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeRotateCaptcha {
+	if result != captcha.CaptchaTypeRotateCaptcha {
 		t.Errorf("expected rotatecaptcha, got %v", result)
 	}
 }
@@ -526,10 +527,10 @@ func TestDetectClickCaptcha(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeClickCaptcha {
+	if result != captcha.CaptchaTypeClickCaptcha {
 		t.Errorf("expected clickcaptcha, got %v", result)
 	}
 }
@@ -553,10 +554,10 @@ func TestDetectImageCaptcha(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeImageCaptcha {
+	if result != captcha.CaptchaTypeImageCaptcha {
 		t.Errorf("expected imagecaptcha, got %v", result)
 	}
 }
@@ -580,10 +581,10 @@ func TestDetectPuzzleCaptcha(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypePuzzleCaptcha {
+	if result != captcha.CaptchaTypePuzzleCaptcha {
 		t.Errorf("expected puzzlecaptcha, got %v", result)
 	}
 }
@@ -607,10 +608,10 @@ func TestDetectDatadome(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeDatadome {
+	if result != captcha.CaptchaTypeDatadome {
 		t.Errorf("expected datadome, got %v", result)
 	}
 }
@@ -634,10 +635,10 @@ func TestDetectPerimeterX(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypePerimeterX {
+	if result != captcha.CaptchaTypePerimeterX {
 		t.Errorf("expected perimeterx, got %v", result)
 	}
 }
@@ -660,10 +661,10 @@ func TestDetectArgon(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeArgon {
+	if result != captcha.CaptchaTypeArgon {
 		t.Errorf("expected argon, got %v", result)
 	}
 }
@@ -686,10 +687,10 @@ func TestDetectBehaviotech(t *testing.T) {
 		t.Fatal("expected to find form")
 	}
 
-	detector := &CaptchaDetector{}
+	detector := &captcha.CaptchaDetector{}
 	result := detector.DetectInForm(forms[0])
 
-	if result != CaptchaTypeBehaviotech {
+	if result != captcha.CaptchaTypeBehaviotech {
 		t.Errorf("expected behaviotech, got %v", result)
 	}
 }

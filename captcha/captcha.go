@@ -1,4 +1,4 @@
-package classifier
+package captcha
 
 import (
 	"regexp"
@@ -17,7 +17,7 @@ const (
 	CaptchaTypeRecaptchaV2        CaptchaType = "recaptchav2"
 	CaptchaTypeRecaptchaInvisible CaptchaType = "recaptcha-invisible"
 	CaptchaTypeHCaptcha           CaptchaType = "hcaptcha"
-	CaptchaTurnstile              CaptchaType = "turnstile"
+	CaptchaTypeTurnstile          CaptchaType = "turnstile"
 	CaptchaTypeGeetest            CaptchaType = "geetest"
 	CaptchaTypeFriendlyCaptcha    CaptchaType = "friendlycaptcha"
 	CaptchaTypeRotateCaptcha      CaptchaType = "rotatecaptcha"
@@ -41,6 +41,46 @@ const (
 	CaptchaTypeSimple             CaptchaType = "simplecaptcha"
 	CaptchaTypeOther              CaptchaType = "other"
 )
+
+// String returns the string representation of CaptchaType
+func (ct CaptchaType) String() string { return string(ct) }
+
+// IsValidCaptchaType reports whether the provided string maps to a known CaptchaType
+func IsValidCaptchaType(s string) bool {
+	switch s {
+	case string(CaptchaTypeNone),
+		string(CaptchaTypeRecaptcha),
+		string(CaptchaTypeRecaptchaV2),
+		string(CaptchaTypeRecaptchaInvisible),
+		string(CaptchaTypeHCaptcha),
+		string(CaptchaTypeTurnstile),
+		string(CaptchaTypeGeetest),
+		string(CaptchaTypeFriendlyCaptcha),
+		string(CaptchaTypeRotateCaptcha),
+		string(CaptchaTypeClickCaptcha),
+		string(CaptchaTypeImageCaptcha),
+		string(CaptchaTypePuzzleCaptcha),
+		string(CaptchaTypeSliderCaptcha),
+		string(CaptchaTypeMCaptcha),
+		string(CaptchaTypeDatadome),
+		string(CaptchaTypePerimeterX),
+		string(CaptchaTypeArgon),
+		string(CaptchaTypeBehaviotech),
+		string(CaptchaTypeSmartCaptcha),
+		string(CaptchaTypeYandex),
+		string(CaptchaTypeFuncaptcha),
+		string(CaptchaTypeKasada),
+		string(CaptchaTypeImperva),
+		string(CaptchaTypeAwsWaf),
+		string(CaptchaTypeCoingecko),
+		string(CaptchaTypeNovaScape),
+		string(CaptchaTypeSimple),
+		string(CaptchaTypeOther):
+		return true
+	default:
+		return false
+	}
+}
 
 // CaptchaDetector detects CAPTCHA protection in forms using multi-layer detection
 type CaptchaDetector struct{}
@@ -101,7 +141,7 @@ func detectByScriptDomain(form *goquery.Selection) CaptchaType {
 			regexp.MustCompile(`js\.hcaptcha\.com`),
 			regexp.MustCompile(`hcaptcha`),
 		},
-		CaptchaTurnstile: {
+		CaptchaTypeTurnstile: {
 			regexp.MustCompile(`challenges\.cloudflare\.com`),
 			regexp.MustCompile(`js\.cloudflare\.com.*turnstile`),
 		},
@@ -211,26 +251,24 @@ func detectByScriptDomain(form *goquery.Selection) CaptchaType {
 	return CaptchaTypeNone
 }
 
+// The rest of the helper functions are ported verbatim from the original implementation.
 // detectByDataAttributes checks for CAPTCHA-specific data attributes (less common, more specific patterns)
 func detectByDataAttributes(form *goquery.Selection) CaptchaType {
 	html, _ := form.Html()
 	htmlLower := strings.ToLower(html)
 
-	// Only check for unique data attributes that are specific to certain CAPTCHAs
 	dataAttrPatterns := map[CaptchaType][]string{
-		CaptchaTypeGeetest:         {"id_geetest", "geetest_id"},
-		CaptchaTypeFriendlyCaptcha: {"frc-captcha", "data-public-key"},
-		CaptchaTypeSliderCaptcha:   {"data-slideshow", "slide-verify-container"},
-		CaptchaTypeDatadome:        {"dd-challenge", "dd-action"},
-		CaptchaTypeYandex:          {"data-smartcaptcha", "captcha-container-yandex"},
-		CaptchaTypePerimeterX:      {"_pxappid", "_px3"},
-		CaptchaTypeArgon:           {"argon-captcha"},
-		CaptchaTypeSmartCaptcha:    {"smart-captcha"},
+		CaptchaTypeKasada:       {"data-kasada", "kasada"},
+		CaptchaTypeImperva:      {"data-incapsula", "data-imperva"},
+		CaptchaTypeDatadome:     {"data-datadome", "dd-challenge"},
+		CaptchaTypePerimeterX:   {"data-px", "_pxappid"},
+		CaptchaTypeMCaptcha:     {"data-mcaptcha"},
+		CaptchaTypeSmartCaptcha: {"data-smartcaptcha", "smartcaptcha"},
 	}
 
-	for captchaType, attrs := range dataAttrPatterns {
-		for _, attr := range attrs {
-			if strings.Contains(htmlLower, attr) {
+	for captchaType, patterns := range dataAttrPatterns {
+		for _, p := range patterns {
+			if strings.Contains(htmlLower, p) {
 				return captchaType
 			}
 		}
@@ -239,209 +277,51 @@ func detectByDataAttributes(form *goquery.Selection) CaptchaType {
 	return CaptchaTypeNone
 }
 
-// detectByFieldNames checks for simple/text-based CAPTCHAs by field name patterns
+func detectByClasses(form *goquery.Selection) CaptchaType {
+	html, _ := form.Html()
+	htmlLower := strings.ToLower(html)
+
+	classPatterns := map[CaptchaType][]string{
+		CaptchaTypeRecaptcha:          {"g-recaptcha", "grecaptcha"},
+		CaptchaTypeRecaptchaV2:        {"g-recaptcha-v2", "grecaptcha-v2"},
+		CaptchaTypeRecaptchaInvisible: {"g-recaptcha-invisible", "grecaptcha-invisible"},
+		CaptchaTypeHCaptcha:           {"h-captcha", "hcaptcha"},
+		CaptchaTypeTurnstile:          {"cf-turnstile", "turnstile"},
+		CaptchaTypeGeetest:            {"geetest_", "geetest-box"},
+		CaptchaTypeFriendlyCaptcha:    {"frc-captcha", "friendlycaptcha"},
+		CaptchaTypeMCaptcha:           {"mcaptcha", "mcaptcha-container"},
+		CaptchaTypeKasada:             {"kas", "kasada"},
+		CaptchaTypeImperva:            {"_inc", "incapsula", "imperva"},
+		CaptchaTypeAwsWaf:             {"aws-waf", "awswaf"},
+		CaptchaTypeDatadome:           {"dd-challenge", "dd-top"},
+		CaptchaTypePerimeterX:         {"_px3", "px-container"},
+		CaptchaTypeSmartCaptcha:       {"smart-captcha", "smartcaptcha"},
+		CaptchaTypeArgon:              {"argon-captcha", "argon"},
+		CaptchaTypePuzzleCaptcha:      {"puzzle-captcha", "__puzzle_captcha"},
+		CaptchaTypeYandex:             {"smartcaptcha", "yandex-captcha"},
+		CaptchaTypeFuncaptcha:         {"funcaptcha-container"},
+	}
+
+	for captchaType, classes := range classPatterns {
+		for _, class := range classes {
+			if strings.Contains(htmlLower, class) {
+				return captchaType
+			}
+		}
+	}
+
+	return CaptchaTypeNone
+}
+
 func detectByFieldNames(form *goquery.Selection) CaptchaType {
 	html, _ := form.Html()
 	htmlLower := strings.ToLower(html)
 
-	// Detect simple text-based CAPTCHAs by common field names
-	simpleCaptchaPatterns := []string{
-		"simplecaptcha",     // simpleCaptcha field
-		"captcha_code",      // captcha_code field
-		"captcha_input",     // captcha_input field
-		"verify_code",       // verify_code field
-		"verification_code", // verification_code field
-		"security_code",     // security_code field
-		"text_captcha",      // text_captcha field
-		"captcha_result",    // captcha_result field
+	// Specific checks for scripted puzzle markers
+	if strings.Contains(htmlLower, "__puzzle_captcha") || strings.Contains(htmlLower, "puzzle-captcha") {
+		return CaptchaTypePuzzleCaptcha
 	}
 
-	for _, pattern := range simpleCaptchaPatterns {
-		if strings.Contains(htmlLower, pattern) {
-			return CaptchaTypeSimple
-		}
-	}
-
-	return CaptchaTypeNone
-}
-
-// detectByClasses checks for CAPTCHA-specific class names
-func detectByClasses(form *goquery.Selection) CaptchaType {
-	classPatterns := map[CaptchaType][]string{
-		CaptchaTypeRecaptcha:          {"g-recaptcha", "grecaptcha"},
-		CaptchaTypeRecaptchaV2:        {"g-recaptcha-v2", "grecaptcha-v2"},
-		CaptchaTypeRecaptchaInvisible: {"g-recaptcha-invisible", "grecaptcha-invisible"},
-		CaptchaTypeHCaptcha:           {"h-captcha", "hcaptcha"},
-		CaptchaTurnstile:              {"cf-turnstile", "cloudflare-turnstile-challenge", "turnstile"},
-		CaptchaTypeGeetest:            {"geetest_", "geetest-box"},
-		CaptchaTypeFriendlyCaptcha:    {"frc-captcha", "friendlycaptcha"},
-		CaptchaTypeRotateCaptcha:      {"rotate-captcha", "rotatecaptcha"},
-		CaptchaTypeClickCaptcha:       {"click-captcha", "clickcaptcha"},
-		CaptchaTypeImageCaptcha:       {"image-captcha", "imagecaptcha"},
-		CaptchaTypePuzzleCaptcha:      {"puzzle-captcha", "__puzzle_captcha"},
-		CaptchaTypeSliderCaptcha:      {"slider-captcha", "slidercaptcha", "slide-verify"},
-		CaptchaTypeDatadome:           {"dd-challenge", "dd-top"},
-		CaptchaTypePerimeterX:         {"_px3", "px-container"},
-		CaptchaTypeArgon:              {"argon-captcha"},
-		CaptchaTypeSmartCaptcha:       {"smart-captcha"},
-		CaptchaTypeYandex:             {"smartcaptcha", "yandex-captcha"},
-		CaptchaTypeFuncaptcha:         {"funcaptcha-container"},
-		CaptchaTypeMCaptcha:           {"mcaptcha", "mcaptcha-container"},
-		CaptchaTypeKasada:             {"kas", "kasada"},
-		CaptchaTypeImperva:            {"_inc", "incapsula", "imperva"},
-		CaptchaTypeAwsWaf:             {"aws-waf", "awswaf"},
-	}
-
-	html, _ := form.Html()
-	htmlLower := strings.ToLower(html)
-
-	for captchaType, classes := range classPatterns {
-		for _, class := range classes {
-			if strings.Contains(htmlLower, class) {
-				return captchaType
-			}
-		}
-	}
-
-	return CaptchaTypeNone
-}
-
-// detectByIframe checks for CAPTCHA-specific iframes
-func detectByIframe(form *goquery.Selection) CaptchaType {
-	iframePatterns := map[CaptchaType][]string{
-		CaptchaTypeRecaptcha:     {"recaptcha"},
-		CaptchaTypeHCaptcha:      {"hcaptcha"},
-		CaptchaTurnstile:         {"challenges.cloudflare.com"},
-		CaptchaTypeGeetest:       {"geetest"},
-		CaptchaTypeSliderCaptcha: {"slidercaptcha", "slide-verify"},
-		CaptchaTypeMCaptcha:      {"mcaptcha", "app.mcaptcha.io"},
-		CaptchaTypeYandex:        {"yandex", "smartcaptcha"},
-		CaptchaTypeKasada:        {"kasada", "kas"},
-		CaptchaTypeImperva:       {"incapsula", "imperva"},
-		CaptchaTypeDatadome:      {"datadome"},
-	}
-
-	html, _ := form.Html()
-	htmlLower := strings.ToLower(html)
-
-	// Check for iframe with CAPTCHA patterns in raw HTML
-	if strings.Contains(htmlLower, "iframe") {
-		for captchaType, patterns := range iframePatterns {
-			for _, pattern := range patterns {
-				if strings.Contains(htmlLower, pattern) && strings.Contains(htmlLower, "iframe") {
-					return captchaType
-				}
-			}
-		}
-	}
-
-	return CaptchaTypeNone
-}
-
-// hasGenericCaptchaMarkers checks for generic CAPTCHA-related HTML markers
-func hasGenericCaptchaMarkers(form *goquery.Selection) bool {
-	html, _ := form.Html()
-	htmlLower := strings.ToLower(html)
-
-	// Check for iframe with captcha-related keywords
-	if strings.Contains(htmlLower, "iframe") {
-		if strings.Contains(htmlLower, "captcha") ||
-			strings.Contains(htmlLower, "challenge") ||
-			strings.Contains(htmlLower, "security") {
-			return true
-		}
-	}
-
-	// Check for script tags with captcha/security keywords
-	hasCaptchaInScript := false
-	form.Find("script").Each(func(_ int, s *goquery.Selection) {
-		scriptText := strings.ToLower(s.Text())
-		if strings.Contains(scriptText, "captcha") ||
-			strings.Contains(scriptText, "antibot") ||
-			strings.Contains(scriptText, "challenge") {
-			hasCaptchaInScript = true
-		}
-	})
-
-	return hasCaptchaInScript
-}
-
-// DetectCaptchaInHTML detects all CAPTCHAs in an HTML document using domain-first approach
-func DetectCaptchaInHTML(html string) CaptchaType {
-	htmlLower := strings.ToLower(html)
-
-	// Priority 1: Domain-based detection patterns (most reliable)
-	domainPatterns := map[CaptchaType][]string{
-		CaptchaTypeRecaptcha:          {"google.com/recaptcha", "gstatic.com", "recaptcha"},
-		CaptchaTypeRecaptchaV2:        {"recaptcha/api.js", "recaptcha.*v2"},
-		CaptchaTypeRecaptchaInvisible: {"recaptcha.*invisible"},
-		CaptchaTypeHCaptcha:           {"hcaptcha", "js.hcaptcha.com"},
-		CaptchaTurnstile:              {"challenges.cloudflare.com", "js.cloudflare.com"},
-		CaptchaTypeGeetest:            {"geetest", "api.geetest.com"},
-		CaptchaTypeFriendlyCaptcha:    {"friendlycaptcha", "cdn.friendlycaptcha.com"},
-		CaptchaTypeRotateCaptcha:      {"rotatecaptcha", "api.rotatecaptcha.com"},
-		CaptchaTypeClickCaptcha:       {"clickcaptcha", "assets.clickcaptcha.com"},
-		CaptchaTypeImageCaptcha:       {"imagecaptcha", "api.imagecaptcha.com"},
-		CaptchaTypePuzzleCaptcha:      {"puzzle-captcha", "__puzzle_captcha"},
-		CaptchaTypeSliderCaptcha:      {"slider-captcha", "slidercaptcha"},
-		CaptchaTypeMCaptcha:           {"mcaptcha", "app.mcaptcha.io"},
-		CaptchaTypeKasada:             {"kasada", "kas.kasadaproducts.com"},
-		CaptchaTypeImperva:            {"incapsula", "imperva"},
-		CaptchaTypeAwsWaf:             {"awswaf", "captcha.aws.amazon.com"},
-		CaptchaTypeDatadome:           {"datadome", "dd-challenge"},
-		CaptchaTypePerimeterX:         {"perimeterx", "_pxappid"},
-		CaptchaTypeArgon:              {"argon-captcha"},
-		CaptchaTypeBehaviotech:        {"behaviotech"},
-		CaptchaTypeSmartCaptcha:       {"captcha.yandex.com", "smartcaptcha"},
-		CaptchaTypeYandex:             {"yandex.com/.*captcha", "yandex.ru/.*captcha", "smartcaptcha.yandex"},
-		CaptchaTypeFuncaptcha:         {"funcaptcha", "arkose"},
-		CaptchaTypeCoingecko:          {"wsiz.com"},
-		CaptchaTypeNovaScape:          {"novascape"},
-	}
-
-	for captchaType, patterns := range domainPatterns {
-		for _, pattern := range patterns {
-			if strings.Contains(htmlLower, pattern) {
-				return captchaType
-			}
-		}
-	}
-
-	// Priority 2: Class-based detection (when no domain is present)
-	classPatterns := map[CaptchaType][]string{
-		CaptchaTypeRecaptcha:          {"g-recaptcha", "grecaptcha"},
-		CaptchaTypeRecaptchaV2:        {"g-recaptcha-v2", "grecaptcha-v2"},
-		CaptchaTypeRecaptchaInvisible: {"g-recaptcha-invisible", "grecaptcha-invisible"},
-		CaptchaTypeHCaptcha:           {"h-captcha", "hcaptcha"},
-		CaptchaTurnstile:              {"cf-turnstile", "cloudflare-turnstile-challenge", "turnstile"},
-		CaptchaTypeGeetest:            {"geetest_", "geetest-box"},
-		CaptchaTypeFriendlyCaptcha:    {"frc-captcha", "friendlycaptcha"},
-		CaptchaTypeRotateCaptcha:      {"rotate-captcha", "rotatecaptcha"},
-		CaptchaTypeClickCaptcha:       {"click-captcha", "clickcaptcha"},
-		CaptchaTypeImageCaptcha:       {"image-captcha", "imagecaptcha"},
-		CaptchaTypePuzzleCaptcha:      {"puzzle-captcha", "__puzzle_captcha"},
-		CaptchaTypeSliderCaptcha:      {"slider-captcha", "slidercaptcha"},
-		CaptchaTypeMCaptcha:           {"mcaptcha", "mcaptcha-container"},
-		CaptchaTypeKasada:             {"kas", "kasada"},
-		CaptchaTypeImperva:            {"_inc", "incapsula", "imperva"},
-		CaptchaTypeAwsWaf:             {"aws-waf", "awswaf"},
-		CaptchaTypeDatadome:           {"dd-challenge", "dd-top"},
-		CaptchaTypePerimeterX:         {"_px3", "px-container"},
-		CaptchaTypeArgon:              {"argon-captcha"},
-		CaptchaTypeSmartCaptcha:       {"smart-captcha"},
-		CaptchaTypeYandex:             {"smartcaptcha", "yandex-captcha"},
-		CaptchaTypeFuncaptcha:         {"funcaptcha-container"},
-	}
-
-	for captchaType, classes := range classPatterns {
-		for _, class := range classes {
-			if strings.Contains(htmlLower, class) {
-				return captchaType
-			}
-		}
-	}
-
-	// Priority 3: Simple/text-based CAPTCHA detection by field names
 	simpleCaptchaPatterns := []string{
 		"simplecaptcha",
 		"captcha_code",
@@ -462,48 +342,107 @@ func DetectCaptchaInHTML(html string) CaptchaType {
 	return CaptchaTypeNone
 }
 
-// IsValidCaptchaType checks if a string is a valid CaptchaType
-func IsValidCaptchaType(s string) bool {
-	validTypes := []CaptchaType{
-		CaptchaTypeNone,
-		CaptchaTypeRecaptcha,
-		CaptchaTypeRecaptchaV2,
-		CaptchaTypeRecaptchaInvisible,
-		CaptchaTypeHCaptcha,
-		CaptchaTurnstile,
-		CaptchaTypeGeetest,
-		CaptchaTypeFriendlyCaptcha,
-		CaptchaTypeRotateCaptcha,
-		CaptchaTypeClickCaptcha,
-		CaptchaTypeImageCaptcha,
-		CaptchaTypePuzzleCaptcha,
-		CaptchaTypeSliderCaptcha,
-		CaptchaTypeMCaptcha,
-		CaptchaTypeDatadome,
-		CaptchaTypePerimeterX,
-		CaptchaTypeArgon,
-		CaptchaTypeBehaviotech,
-		CaptchaTypeSmartCaptcha,
-		CaptchaTypeYandex,
-		CaptchaTypeFuncaptcha,
-		CaptchaTypeKasada,
-		CaptchaTypeImperva,
-		CaptchaTypeAwsWaf,
-		CaptchaTypeCoingecko,
-		CaptchaTypeNovaScape,
-		CaptchaTypeSimple,
-		CaptchaTypeOther,
+func detectByIframe(form *goquery.Selection) CaptchaType {
+	var iframeSrcs []string
+	form.Find("iframe").Each(func(_ int, s *goquery.Selection) {
+		if src, ok := s.Attr("src"); ok {
+			iframeSrcs = append(iframeSrcs, strings.ToLower(src))
+		}
+	})
+
+	iframePatterns := map[CaptchaType][]string{
+		CaptchaTypeRecaptcha:  {"google.com/recaptcha", "www.google.com/recaptcha"},
+		CaptchaTypeHCaptcha:   {"hcaptcha.com"},
+		CaptchaTypeTurnstile:  {"cloudflare.com/turnstile"},
+		CaptchaTypeFuncaptcha: {"funcaptcha"},
+		CaptchaTypeYandex:     {"yandex", "smartcaptcha"},
 	}
 
-	for _, t := range validTypes {
-		if CaptchaType(s) == t {
+	for captchaType, patterns := range iframePatterns {
+		for _, src := range iframeSrcs {
+			for _, p := range patterns {
+				if strings.Contains(src, p) {
+					return captchaType
+				}
+			}
+		}
+	}
+
+	return CaptchaTypeNone
+}
+
+func hasGenericCaptchaMarkers(form *goquery.Selection) bool {
+	html, _ := form.Html()
+	htmlLower := strings.ToLower(html)
+
+	genericMarkers := []string{"captcha", "g-recaptcha", "h-captcha", "turnstile", "geetest"}
+	for _, m := range genericMarkers {
+		if strings.Contains(htmlLower, m) {
 			return true
 		}
 	}
 	return false
 }
 
-// String returns the string representation of a CaptchaType
-func (ct CaptchaType) String() string {
-	return string(ct)
+// DetectCaptchaInHTML performs a best-effort detection on a full HTML string.
+// It checks literal substrings first and falls back to regex patterns for complex matches.
+func DetectCaptchaInHTML(html string) CaptchaType {
+	htmlLower := strings.ToLower(html)
+
+	// Literal patterns for straightforward substring matching
+	literalPatterns := map[CaptchaType][]string{
+		CaptchaTypeRecaptcha:          {"google.com/recaptcha", "gstatic.com", "recaptcha/api.js", "recaptcha", "g-recaptcha"},
+		CaptchaTypeRecaptchaV2:        {"recaptcha/api.js"},
+		CaptchaTypeRecaptchaInvisible: {"recaptcha/api.js"},
+		CaptchaTypeHCaptcha:           {"hcaptcha", "js.hcaptcha.com", "h-captcha"},
+		CaptchaTypeTurnstile:          {"challenges.cloudflare.com", "js.cloudflare.com", "cf-turnstile", "turnstile"},
+		CaptchaTypeGeetest:            {"geetest", "api.geetest.com"},
+		CaptchaTypeFriendlyCaptcha:    {"friendlycaptcha", "cdn.friendlycaptcha.com"},
+		CaptchaTypeRotateCaptcha:      {"rotatecaptcha", "api.rotatecaptcha.com"},
+		CaptchaTypeClickCaptcha:       {"clickcaptcha", "assets.clickcaptcha.com"},
+		CaptchaTypeImageCaptcha:       {"imagecaptcha", "api.imagecaptcha.com"},
+		CaptchaTypePuzzleCaptcha:      {"puzzle-captcha", "__puzzle_captcha"},
+		CaptchaTypeSliderCaptcha:      {"slider-captcha", "slidercaptcha"},
+		CaptchaTypeMCaptcha:           {"mcaptcha", "app.mcaptcha.io"},
+		CaptchaTypeKasada:             {"kasada", "kas.kasadaproducts.com"},
+		CaptchaTypeImperva:            {"incapsula", "imperva"},
+		CaptchaTypeAwsWaf:             {"awswaf", "captcha.aws.amazon.com"},
+		CaptchaTypeDatadome:           {"datadome", "dd-challenge"},
+		CaptchaTypePerimeterX:         {"perimeterx", "_pxappid"},
+		CaptchaTypeArgon:              {"argon-captcha", "argon-captcha"},
+		CaptchaTypeBehaviotech:        {"behaviotech"},
+		CaptchaTypeSmartCaptcha:       {"captcha.yandex.com", "smartcaptcha"},
+		CaptchaTypeFuncaptcha:         {"funcaptcha", "arkose"},
+		CaptchaTypeCoingecko:          {"wsiz.com"},
+		CaptchaTypeNovaScape:          {"novascape"},
+	}
+
+	// Regex patterns for complex domain matching
+	regexPatterns := map[CaptchaType][]*regexp.Regexp{
+		CaptchaTypeYandex: {
+			regexp.MustCompile(`yandex\.com/[^"'\s]*captcha`),
+			regexp.MustCompile(`yandex\.ru/[^"'\s]*captcha`),
+			regexp.MustCompile(`smartcaptcha\.yandex`),
+		},
+	}
+
+	// Check literal patterns first
+	for captchaType, patterns := range literalPatterns {
+		for _, pattern := range patterns {
+			if strings.Contains(htmlLower, pattern) {
+				return captchaType
+			}
+		}
+	}
+
+	// Check regex patterns
+	for captchaType, regexes := range regexPatterns {
+		for _, re := range regexes {
+			if re.MatchString(htmlLower) {
+				return captchaType
+			}
+		}
+	}
+
+	return CaptchaTypeNone
 }

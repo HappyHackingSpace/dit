@@ -19,7 +19,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/happyhackingspace/dit/captcha"
 	"github.com/happyhackingspace/dit/classifier"
+	"github.com/happyhackingspace/dit/internal/htmlutil"
 )
 
 // Classifier wraps the form and field type classification models.
@@ -139,11 +141,28 @@ func (c *Classifier) ExtractForms(html string) ([]FormResult, error) {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
 
+	// Also run per-form CAPTCHA detection and merge into the output
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		return nil, fmt.Errorf("dit: %w", err)
+	}
+	forms := htmlutil.GetForms(doc)
+
 	out := make([]FormResult, len(results))
+	detector := &captcha.CaptchaDetector{}
 	for i, r := range results {
+		capType := captcha.CaptchaTypeNone
+		if i < len(forms) {
+			capType = detector.DetectInForm(forms[i])
+		}
+		capStr := ""
+		if capType != captcha.CaptchaTypeNone {
+			capStr = string(capType)
+		}
 		out[i] = FormResult{
-			Type:   r.Result.Form,
-			Fields: r.Result.Fields,
+			Type:    r.Result.Form,
+			Captcha: capStr,
+			Fields:  r.Result.Fields,
 		}
 	}
 	return out, nil
@@ -161,11 +180,28 @@ func (c *Classifier) ExtractFormsProba(html string, threshold float64) ([]FormRe
 		return nil, fmt.Errorf("dit: %w", err)
 	}
 
+	// Also run per-form CAPTCHA detection and merge into the output
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		return nil, fmt.Errorf("dit: %w", err)
+	}
+	forms := htmlutil.GetForms(doc)
+
 	out := make([]FormResultProba, len(results))
+	detector := &captcha.CaptchaDetector{}
 	for i, r := range results {
+		capType := captcha.CaptchaTypeNone
+		if i < len(forms) {
+			capType = detector.DetectInForm(forms[i])
+		}
+		capStr := ""
+		if capType != captcha.CaptchaTypeNone {
+			capStr = string(capType)
+		}
 		out[i] = FormResultProba{
-			Type:   r.Proba.Form,
-			Fields: r.Proba.Fields,
+			Type:    r.Proba.Form,
+			Captcha: capStr,
+			Fields:  r.Proba.Fields,
 		}
 	}
 	return out, nil
@@ -193,9 +229,16 @@ func (c *Classifier) ExtractPageType(html string) (*PageResult, error) {
 		}
 	}
 
+	// Detect page-level captcha from full HTML
+	pageCap := captcha.DetectCaptchaInHTML(html)
+	capStr := ""
+	if pageCap != captcha.CaptchaTypeNone {
+		capStr = string(pageCap)
+	}
+
 	return &PageResult{
 		Type:    pageResult.Form,
-		Captcha: pageResult.Captcha,
+		Captcha: capStr,
 		Forms:   forms,
 	}, nil
 }
@@ -222,9 +265,16 @@ func (c *Classifier) ExtractPageTypeProba(html string, threshold float64) (*Page
 		}
 	}
 
+	// Detect page-level captcha from full HTML
+	pageCap := captcha.DetectCaptchaInHTML(html)
+	capStr := ""
+	if pageCap != captcha.CaptchaTypeNone {
+		capStr = string(pageCap)
+	}
+
 	return &PageResultProba{
 		Type:    pageProba.Form,
-		Captcha: pageProba.Captcha,
+		Captcha: capStr,
 		Forms:   forms,
 	}, nil
 }
