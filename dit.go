@@ -229,11 +229,23 @@ func (c *Classifier) ExtractPageType(html string) (*PageResult, error) {
 		}
 	}
 
-	// Detect page-level captcha from full HTML
-	pageCap := captcha.DetectCaptchaInHTML(html)
+	// Detect page-level captcha: prefer form-level detection, fall back to full-HTML scan
 	capStr := ""
-	if pageCap != captcha.CaptchaTypeNone {
-		capStr = string(pageCap)
+	doc, docErr := htmlutil.LoadHTMLString(html)
+	if docErr == nil {
+		htmlForms := htmlutil.GetForms(doc)
+		detector := &captcha.CaptchaDetector{}
+		for _, f := range htmlForms {
+			if ct := detector.DetectInForm(f); ct != captcha.CaptchaTypeNone {
+				capStr = string(ct)
+				break
+			}
+		}
+	}
+	if capStr == "" {
+		if pageCap := captcha.DetectCaptchaInHTML(html); pageCap != captcha.CaptchaTypeNone {
+			capStr = string(pageCap)
+		}
 	}
 
 	return &PageResult{
@@ -265,11 +277,23 @@ func (c *Classifier) ExtractPageTypeProba(html string, threshold float64) (*Page
 		}
 	}
 
-	// Detect page-level captcha from full HTML
-	pageCap := captcha.DetectCaptchaInHTML(html)
+	// Detect page-level captcha: prefer form-level detection, fall back to full-HTML scan
 	capStr := ""
-	if pageCap != captcha.CaptchaTypeNone {
-		capStr = string(pageCap)
+	doc, docErr := htmlutil.LoadHTMLString(html)
+	if docErr == nil {
+		htmlForms := htmlutil.GetForms(doc)
+		detector := &captcha.CaptchaDetector{}
+		for _, f := range htmlForms {
+			if ct := detector.DetectInForm(f); ct != captcha.CaptchaTypeNone {
+				capStr = string(ct)
+				break
+			}
+		}
+	}
+	if capStr == "" {
+		if pageCap := captcha.DetectCaptchaInHTML(html); pageCap != captcha.CaptchaTypeNone {
+			capStr = string(pageCap)
+		}
 	}
 
 	return &PageResultProba{
