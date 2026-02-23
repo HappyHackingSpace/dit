@@ -207,6 +207,26 @@ func (c *Classifier) ExtractFormsProba(html string, threshold float64) ([]FormRe
 	return out, nil
 }
 
+// detectPageCaptcha detects page-level CAPTCHA by first checking each form
+// (via CaptchaDetector.DetectInForm) and falling back to a full-HTML scan
+// (via captcha.DetectCaptchaInHTML).
+func detectPageCaptcha(html string) string {
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err == nil {
+		forms := htmlutil.GetForms(doc)
+		detector := &captcha.CaptchaDetector{}
+		for _, f := range forms {
+			if ct := detector.DetectInForm(f); ct != captcha.CaptchaTypeNone {
+				return string(ct)
+			}
+		}
+	}
+	if pageCap := captcha.DetectCaptchaInHTML(html); pageCap != captcha.CaptchaTypeNone {
+		return string(pageCap)
+	}
+	return ""
+}
+
 // ExtractPageType classifies the page type and all forms in the HTML.
 func (c *Classifier) ExtractPageType(html string) (*PageResult, error) {
 	if c.fc == nil || c.fc.FormModel == nil {
@@ -229,28 +249,9 @@ func (c *Classifier) ExtractPageType(html string) (*PageResult, error) {
 		}
 	}
 
-	// Detect page-level captcha: prefer form-level detection, fall back to full-HTML scan
-	capStr := ""
-	doc, docErr := htmlutil.LoadHTMLString(html)
-	if docErr == nil {
-		htmlForms := htmlutil.GetForms(doc)
-		detector := &captcha.CaptchaDetector{}
-		for _, f := range htmlForms {
-			if ct := detector.DetectInForm(f); ct != captcha.CaptchaTypeNone {
-				capStr = string(ct)
-				break
-			}
-		}
-	}
-	if capStr == "" {
-		if pageCap := captcha.DetectCaptchaInHTML(html); pageCap != captcha.CaptchaTypeNone {
-			capStr = string(pageCap)
-		}
-	}
-
 	return &PageResult{
 		Type:    pageResult.Form,
-		Captcha: capStr,
+		Captcha: detectPageCaptcha(html),
 		Forms:   forms,
 	}, nil
 }
@@ -277,28 +278,9 @@ func (c *Classifier) ExtractPageTypeProba(html string, threshold float64) (*Page
 		}
 	}
 
-	// Detect page-level captcha: prefer form-level detection, fall back to full-HTML scan
-	capStr := ""
-	doc, docErr := htmlutil.LoadHTMLString(html)
-	if docErr == nil {
-		htmlForms := htmlutil.GetForms(doc)
-		detector := &captcha.CaptchaDetector{}
-		for _, f := range htmlForms {
-			if ct := detector.DetectInForm(f); ct != captcha.CaptchaTypeNone {
-				capStr = string(ct)
-				break
-			}
-		}
-	}
-	if capStr == "" {
-		if pageCap := captcha.DetectCaptchaInHTML(html); pageCap != captcha.CaptchaTypeNone {
-			capStr = string(pageCap)
-		}
-	}
-
 	return &PageResultProba{
 		Type:    pageProba.Form,
-		Captcha: capStr,
+		Captcha: detectPageCaptcha(html),
 		Forms:   forms,
 	}, nil
 }
