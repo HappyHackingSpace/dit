@@ -45,41 +45,42 @@ const (
 // String returns the string representation of CaptchaType
 func (ct CaptchaType) String() string { return string(ct) }
 
+// validCaptchaTypes is the single source of truth for all known CaptchaType values.
+var validCaptchaTypes = map[CaptchaType]struct{}{
+	CaptchaTypeNone:               {},
+	CaptchaTypeRecaptcha:          {},
+	CaptchaTypeRecaptchaV2:        {},
+	CaptchaTypeRecaptchaInvisible: {},
+	CaptchaTypeHCaptcha:           {},
+	CaptchaTypeTurnstile:          {},
+	CaptchaTypeGeetest:            {},
+	CaptchaTypeFriendlyCaptcha:    {},
+	CaptchaTypeRotateCaptcha:      {},
+	CaptchaTypeClickCaptcha:       {},
+	CaptchaTypeImageCaptcha:       {},
+	CaptchaTypePuzzleCaptcha:      {},
+	CaptchaTypeSliderCaptcha:      {},
+	CaptchaTypeMCaptcha:           {},
+	CaptchaTypeDatadome:           {},
+	CaptchaTypePerimeterX:         {},
+	CaptchaTypeArgon:              {},
+	CaptchaTypeBehaviotech:        {},
+	CaptchaTypeSmartCaptcha:       {},
+	CaptchaTypeYandex:             {},
+	CaptchaTypeFuncaptcha:         {},
+	CaptchaTypeKasada:             {},
+	CaptchaTypeImperva:            {},
+	CaptchaTypeAwsWaf:             {},
+	CaptchaTypeCoingecko:          {},
+	CaptchaTypeNovaScape:          {},
+	CaptchaTypeSimple:             {},
+	CaptchaTypeOther:              {},
+}
+
 // IsValidCaptchaType reports whether the provided string maps to a known CaptchaType
 func IsValidCaptchaType(s string) bool {
-	switch s {
-	case string(CaptchaTypeNone),
-		string(CaptchaTypeRecaptcha),
-		string(CaptchaTypeRecaptchaV2),
-		string(CaptchaTypeRecaptchaInvisible),
-		string(CaptchaTypeHCaptcha),
-		string(CaptchaTypeTurnstile),
-		string(CaptchaTypeGeetest),
-		string(CaptchaTypeFriendlyCaptcha),
-		string(CaptchaTypeRotateCaptcha),
-		string(CaptchaTypeClickCaptcha),
-		string(CaptchaTypeImageCaptcha),
-		string(CaptchaTypePuzzleCaptcha),
-		string(CaptchaTypeSliderCaptcha),
-		string(CaptchaTypeMCaptcha),
-		string(CaptchaTypeDatadome),
-		string(CaptchaTypePerimeterX),
-		string(CaptchaTypeArgon),
-		string(CaptchaTypeBehaviotech),
-		string(CaptchaTypeSmartCaptcha),
-		string(CaptchaTypeYandex),
-		string(CaptchaTypeFuncaptcha),
-		string(CaptchaTypeKasada),
-		string(CaptchaTypeImperva),
-		string(CaptchaTypeAwsWaf),
-		string(CaptchaTypeCoingecko),
-		string(CaptchaTypeNovaScape),
-		string(CaptchaTypeSimple),
-		string(CaptchaTypeOther):
-		return true
-	default:
-		return false
-	}
+	_, ok := validCaptchaTypes[CaptchaType(s)]
+	return ok
 }
 
 // CaptchaDetector detects CAPTCHA protection in forms using multi-layer detection
@@ -196,112 +197,112 @@ var scriptDomainPatterns = []captchaPatternEntry{
 // (script src, class/id attributes, data-sitekey, iframes).
 var htmlIntegrationPatterns = []captchaPatternEntry{
 	{CaptchaTypeRecaptchaInvisible, []*regexp.Regexp{
-		regexp.MustCompile(`class="[^"]*g-recaptcha-invisible`),
-		regexp.MustCompile(`data-size="invisible"`),
+		regexp.MustCompile(`class=["'][^"']*g-recaptcha-invisible`),
+		regexp.MustCompile(`data-size=["']invisible["']`),
 	}},
 	{CaptchaTypeRecaptchaV2, []*regexp.Regexp{
-		regexp.MustCompile(`class="[^"]*g-recaptcha-v2`),
+		regexp.MustCompile(`class=["'][^"']*g-recaptcha-v2`),
 	}},
 	{CaptchaTypeRecaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*google\.com/recaptcha`),
-		regexp.MustCompile(`src="[^"]*gstatic\.com/[^"]*recaptcha`),
-		regexp.MustCompile(`src="[^"]*recaptcha/api\.js`),
-		regexp.MustCompile(`class="[^"]*g-recaptcha`),
+		regexp.MustCompile(`src=["'][^"']*google\.com/recaptcha`),
+		regexp.MustCompile(`src=["'][^"']*gstatic\.com/[^"']*recaptcha`),
+		regexp.MustCompile(`src=["'][^"']*recaptcha/api\.js`),
+		regexp.MustCompile(`class=["'][^"']*g-recaptcha`),
 	}},
 	{CaptchaTypeHCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*js\.hcaptcha\.com`),
-		regexp.MustCompile(`class="[^"]*h-captcha`),
+		regexp.MustCompile(`src=["'][^"']*js\.hcaptcha\.com`),
+		regexp.MustCompile(`class=["'][^"']*h-captcha`),
 		regexp.MustCompile(`data-hcaptcha-widget-id`),
 	}},
 	{CaptchaTypeTurnstile, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*challenges\.cloudflare\.com`),
-		regexp.MustCompile(`class="[^"]*cf-turnstile`),
+		regexp.MustCompile(`src=["'][^"']*challenges\.cloudflare\.com`),
+		regexp.MustCompile(`class=["'][^"']*cf-turnstile`),
 	}},
 	{CaptchaTypeGeetest, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*geetest`),
-		regexp.MustCompile(`class="[^"]*geetest`),
+		regexp.MustCompile(`src=["'][^"']*geetest`),
+		regexp.MustCompile(`class=["'][^"']*geetest`),
 	}},
 	{CaptchaTypeFriendlyCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*friendlycaptcha`),
-		regexp.MustCompile(`class="[^"]*frc-captcha`),
+		regexp.MustCompile(`src=["'][^"']*friendlycaptcha`),
+		regexp.MustCompile(`class=["'][^"']*frc-captcha`),
 	}},
 	{CaptchaTypeRotateCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`alt="[^"]*rotatecaptcha`),
-		regexp.MustCompile(`src="[^"]*rotatecaptcha`),
+		regexp.MustCompile(`alt=["'][^"']*rotatecaptcha`),
+		regexp.MustCompile(`src=["'][^"']*rotatecaptcha`),
 	}},
 	{CaptchaTypeClickCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`alt="[^"]*clickcaptcha`),
-		regexp.MustCompile(`src="[^"]*clickcaptcha`),
+		regexp.MustCompile(`alt=["'][^"']*clickcaptcha`),
+		regexp.MustCompile(`src=["'][^"']*clickcaptcha`),
 	}},
 	{CaptchaTypeImageCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`alt="[^"]*imagecaptcha`),
-		regexp.MustCompile(`src="[^"]*imagecaptcha`),
+		regexp.MustCompile(`alt=["'][^"']*imagecaptcha`),
+		regexp.MustCompile(`src=["'][^"']*imagecaptcha`),
 	}},
 	{CaptchaTypePuzzleCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`class="[^"]*__puzzle_captcha`),
+		regexp.MustCompile(`class=["'][^"']*__puzzle_captcha`),
 	}},
 	{CaptchaTypeSliderCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`class="[^"]*slider-captcha`),
-		regexp.MustCompile(`src="[^"]*slidercaptcha`),
+		regexp.MustCompile(`class=["'][^"']*slider-captcha`),
+		regexp.MustCompile(`src=["'][^"']*slidercaptcha`),
 	}},
 	{CaptchaTypeMCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*mcaptcha`),
-		regexp.MustCompile(`class="[^"]*mcaptcha`),
+		regexp.MustCompile(`src=["'][^"']*mcaptcha`),
+		regexp.MustCompile(`class=["'][^"']*mcaptcha`),
 		regexp.MustCompile(`data-mcaptcha`),
 	}},
 	{CaptchaTypeKasada, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*kasadaproducts\.com`),
+		regexp.MustCompile(`src=["'][^"']*kasadaproducts\.com`),
 		regexp.MustCompile(`data-kasada`),
 	}},
 	{CaptchaTypeImperva, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*/_incapsula_resource`),
+		regexp.MustCompile(`src=["'][^"']*/_incapsula_resource`),
 		regexp.MustCompile(`data-incapsula`),
 		regexp.MustCompile(`data-imperva`),
 	}},
 	{CaptchaTypeAwsWaf, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*aws-waf-captcha`),
-		regexp.MustCompile(`src="[^"]*awswaf\.com`),
+		regexp.MustCompile(`src=["'][^"']*aws-waf-captcha`),
+		regexp.MustCompile(`src=["'][^"']*awswaf\.com`),
 	}},
 	{CaptchaTypeDatadome, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*datadome`),
+		regexp.MustCompile(`src=["'][^"']*datadome`),
 		regexp.MustCompile(`data-datadome`),
-		regexp.MustCompile(`class="[^"]*dd-challenge`),
+		regexp.MustCompile(`class=["'][^"']*dd-challenge`),
 	}},
 	{CaptchaTypePerimeterX, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*perimeterx`),
+		regexp.MustCompile(`src=["'][^"']*perimeterx`),
 		regexp.MustCompile(`data-px`),
 		regexp.MustCompile(`_pxappid`),
 	}},
 	{CaptchaTypeArgon, []*regexp.Regexp{
-		regexp.MustCompile(`class="[^"]*argon-captcha`),
+		regexp.MustCompile(`class=["'][^"']*argon-captcha`),
 	}},
 	{CaptchaTypeBehaviotech, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*behaviotech\.com`),
+		regexp.MustCompile(`src=["'][^"']*behaviotech\.com`),
 	}},
 	// SmartCaptcha (specific Yandex product) before generic Yandex to avoid shadowing.
 	{CaptchaTypeSmartCaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*captcha\.yandex`),
-		regexp.MustCompile(`class="[^"]*smart-captcha`),
+		regexp.MustCompile(`src=["'][^"']*captcha\.yandex`),
+		regexp.MustCompile(`class=["'][^"']*smart-captcha`),
 		regexp.MustCompile(`data-smartcaptcha`),
 	}},
 	{CaptchaTypeYandex, []*regexp.Regexp{
-		regexp.MustCompile(`class="[^"]*yandex-captcha`),
+		regexp.MustCompile(`class=["'][^"']*yandex-captcha`),
 	}},
 	{CaptchaTypeFuncaptcha, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*funcaptcha\.com`),
-		regexp.MustCompile(`src="[^"]*arkoselabs\.com`),
-		regexp.MustCompile(`class="[^"]*funcaptcha`),
+		regexp.MustCompile(`src=["'][^"']*funcaptcha\.com`),
+		regexp.MustCompile(`src=["'][^"']*arkoselabs\.com`),
+		regexp.MustCompile(`class=["'][^"']*funcaptcha`),
 	}},
 	{CaptchaTypeCoingecko, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*wsiz\.com`),
+		regexp.MustCompile(`src=["'][^"']*wsiz\.com`),
 	}},
 	{CaptchaTypeNovaScape, []*regexp.Regexp{
-		regexp.MustCompile(`src="[^"]*novascape`),
+		regexp.MustCompile(`src=["'][^"']*novascape`),
 	}},
 	{CaptchaTypeSimple, []*regexp.Regexp{
-		regexp.MustCompile(`name="[^"]*captcha_code`),
-		regexp.MustCompile(`name="[^"]*captcha_input`),
-		regexp.MustCompile(`id="[^"]*captcha_image`),
+		regexp.MustCompile(`name=["'][^"']*captcha_code`),
+		regexp.MustCompile(`name=["'][^"']*captcha_input`),
+		regexp.MustCompile(`id=["'][^"']*captcha_image`),
 	}},
 }
 
@@ -418,9 +419,9 @@ func detectByClasses(form *goquery.Selection) CaptchaType {
 		captchaType CaptchaType
 		patterns    []string
 	}{
-		{CaptchaTypeRecaptcha, []string{"g-recaptcha", "grecaptcha"}},
-		{CaptchaTypeRecaptchaV2, []string{"g-recaptcha-v2", "grecaptcha-v2"}},
 		{CaptchaTypeRecaptchaInvisible, []string{"g-recaptcha-invisible", "grecaptcha-invisible"}},
+		{CaptchaTypeRecaptchaV2, []string{"g-recaptcha-v2", "grecaptcha-v2"}},
+		{CaptchaTypeRecaptcha, []string{"g-recaptcha", "grecaptcha"}},
 		{CaptchaTypeHCaptcha, []string{"h-captcha", "hcaptcha"}},
 		{CaptchaTypeTurnstile, []string{"cf-turnstile", "turnstile"}},
 		{CaptchaTypeGeetest, []string{"geetest_", "geetest-box", "gee-test"}},
@@ -434,7 +435,7 @@ func detectByClasses(form *goquery.Selection) CaptchaType {
 		{CaptchaTypeSmartCaptcha, []string{"smart-captcha", "smartcaptcha"}},
 		{CaptchaTypeArgon, []string{"argon-captcha"}},
 		{CaptchaTypePuzzleCaptcha, []string{"puzzle-captcha", "__puzzle_captcha"}},
-		{CaptchaTypeYandex, []string{"smartcaptcha", "yandex-captcha"}},
+		{CaptchaTypeYandex, []string{"yandex-captcha"}},
 		{CaptchaTypeFuncaptcha, []string{"funcaptcha-container"}},
 	}
 
