@@ -2,6 +2,9 @@ package dit
 
 import (
 	"testing"
+
+	"github.com/happyhackingspace/dit/captcha"
+	"github.com/happyhackingspace/dit/internal/htmlutil"
 )
 
 // TestFormResultCaptchaTypes tests FormResult with various CAPTCHA types
@@ -632,28 +635,24 @@ func TestOpenSourceCaptchaTypes(t *testing.T) {
 // TestYandexCaptchaDetection tests Yandex SmartCaptcha and regional deployment scenarios
 func TestYandexCaptchaDetection(t *testing.T) {
 	tests := []struct {
-		name         string
-		captcha      string
-		description  string
-		deployRegion string
+		name        string
+		captcha     string
+		description string
 	}{
 		{
-			name:         "yandex_smartcaptcha",
-			captcha:      "yandex",
-			description:  "Yandex SmartCaptcha - Russian behavioral CAPTCHA",
-			deployRegion: "russia",
+			name:        "yandex_smartcaptcha",
+			captcha:     "yandex",
+			description: "Yandex SmartCaptcha - Russian behavioral CAPTCHA",
 		},
 		{
-			name:         "yandex_global",
-			captcha:      "yandex",
-			description:  "Yandex SmartCaptcha - Global deployment",
-			deployRegion: "global",
+			name:        "yandex_global",
+			captcha:     "yandex",
+			description: "Yandex SmartCaptcha - Global deployment",
 		},
 		{
-			name:         "yandex_enterprise",
-			captcha:      "yandex",
-			description:  "Yandex SmartCaptcha - Enterprise use",
-			deployRegion: "enterprise",
+			name:        "yandex_enterprise",
+			captcha:     "yandex",
+			description: "Yandex SmartCaptcha - Enterprise use",
 		},
 	}
 
@@ -733,5 +732,132 @@ func TestMultiCaptchaPage(t *testing.T) {
 		if result.Forms[idx].Captcha != expectedCaptcha {
 			t.Errorf("Form %d captcha: got %s, want %s", idx, result.Forms[idx].Captcha, expectedCaptcha)
 		}
+	}
+}
+
+// TestDetectInFormRecaptcha exercises the actual detection logic with a parsed HTML form.
+func TestDetectInFormRecaptcha(t *testing.T) {
+	html := `<html><body>
+<form method="POST" action="/submit">
+  <input type="email" name="email" />
+  <div class="g-recaptcha" data-sitekey="6LdXXXXXX"></div>
+  <input type="submit" value="Send" />
+</form>
+</body></html>`
+
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forms := htmlutil.GetForms(doc)
+	if len(forms) == 0 {
+		t.Fatal("expected to find a form")
+	}
+
+	detector := &captcha.CaptchaDetector{}
+	ct := detector.DetectInForm(forms[0])
+	if ct != captcha.CaptchaTypeRecaptcha {
+		t.Errorf("expected recaptcha, got %s", ct)
+	}
+}
+
+// TestDetectInFormHCaptcha exercises hCaptcha detection on a parsed form.
+func TestDetectInFormHCaptcha(t *testing.T) {
+	html := `<html><body>
+<form method="POST" action="/login">
+  <input type="text" name="user" />
+  <div class="h-captcha" data-sitekey="10000000-ffff-ffff-ffff-000000000001"></div>
+  <input type="submit" value="Login" />
+</form>
+</body></html>`
+
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forms := htmlutil.GetForms(doc)
+	if len(forms) == 0 {
+		t.Fatal("expected to find a form")
+	}
+
+	detector := &captcha.CaptchaDetector{}
+	ct := detector.DetectInForm(forms[0])
+	if ct != captcha.CaptchaTypeHCaptcha {
+		t.Errorf("expected hcaptcha, got %s", ct)
+	}
+}
+
+// TestDetectInFormTurnstile exercises Cloudflare Turnstile detection on a parsed form.
+func TestDetectInFormTurnstile(t *testing.T) {
+	html := `<html><body>
+<form method="POST" action="/verify">
+  <input type="text" name="name" />
+  <div class="cf-turnstile" data-sitekey="0x4XXXXXXXXXXXXXXXXX"></div>
+  <input type="submit" value="Verify" />
+</form>
+</body></html>`
+
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forms := htmlutil.GetForms(doc)
+	if len(forms) == 0 {
+		t.Fatal("expected to find a form")
+	}
+
+	detector := &captcha.CaptchaDetector{}
+	ct := detector.DetectInForm(forms[0])
+	if ct != captcha.CaptchaTypeTurnstile {
+		t.Errorf("expected turnstile, got %s", ct)
+	}
+}
+
+// TestDetectInFormNoCaptcha verifies a plain form returns no captcha.
+func TestDetectInFormNoCaptcha(t *testing.T) {
+	html := `<html><body>
+<form method="POST" action="/search">
+  <input type="text" name="q" />
+  <input type="submit" value="Search" />
+</form>
+</body></html>`
+
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forms := htmlutil.GetForms(doc)
+	if len(forms) == 0 {
+		t.Fatal("expected to find a form")
+	}
+
+	detector := &captcha.CaptchaDetector{}
+	ct := detector.DetectInForm(forms[0])
+	if ct != captcha.CaptchaTypeNone {
+		t.Errorf("expected none, got %s", ct)
+	}
+}
+
+// TestDetectCaptchaInHTMLRecaptcha tests full-HTML page-level detection.
+func TestDetectCaptchaInHTMLRecaptcha(t *testing.T) {
+	html := `<html><head>
+<script src="https://www.google.com/recaptcha/api.js"></script>
+</head><body>
+<form method="POST"><input type="text" name="user" /><div class="g-recaptcha" data-sitekey="key"></div></form>
+</body></html>`
+
+	ct := captcha.DetectCaptchaInHTML(html)
+	if ct != captcha.CaptchaTypeRecaptcha {
+		t.Errorf("expected recaptcha, got %s", ct)
+	}
+}
+
+// TestDetectCaptchaInHTMLNone verifies no false positives on plain HTML.
+func TestDetectCaptchaInHTMLNone(t *testing.T) {
+	html := `<html><head><title>Hello</title></head><body><p>Welcome</p></body></html>`
+
+	ct := captcha.DetectCaptchaInHTML(html)
+	if ct != captcha.CaptchaTypeNone {
+		t.Errorf("expected none, got %s", ct)
 	}
 }
