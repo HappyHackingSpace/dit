@@ -36,7 +36,7 @@ const (
 	CaptchaTypeKasada             CaptchaType = "kasada"
 	CaptchaTypeImperva            CaptchaType = "imperva"
 	CaptchaTypeAwsWaf             CaptchaType = "awswaf"
-	CaptchaTypeCoingecko          CaptchaType = "wsiz"
+	CaptchaTypeCoingecko          CaptchaType = "wsiz" // wsiz refers to wsiz.com, Coingecko's bot-protection vendor
 	CaptchaTypeNovaScape          CaptchaType = "novascape"
 	CaptchaTypeSimple             CaptchaType = "simplecaptcha"
 	CaptchaTypeOther              CaptchaType = "other"
@@ -142,7 +142,6 @@ var scriptDomainPatterns = []captchaPatternEntry{
 	}},
 	{CaptchaTypeDatadome, []*regexp.Regexp{
 		regexp.MustCompile(`datadome\.co`),
-		regexp.MustCompile(`cdn\.mxpnl\.com`),
 	}},
 	{CaptchaTypePerimeterX, []*regexp.Regexp{
 		regexp.MustCompile(`perimeterx\.net`),
@@ -427,13 +426,13 @@ func detectByClasses(form *goquery.Selection) CaptchaType {
 		{CaptchaTypeGeetest, []string{"geetest_", "geetest-box", "gee-test"}},
 		{CaptchaTypeFriendlyCaptcha, []string{"frc-captcha", "friendlycaptcha"}},
 		{CaptchaTypeMCaptcha, []string{"mcaptcha", "mcaptcha-container"}},
-		{CaptchaTypeKasada, []string{"kas", "kasada"}},
-		{CaptchaTypeImperva, []string{"_inc", "incapsula", "imperva"}},
+		{CaptchaTypeKasada, []string{"kasada"}},
+		{CaptchaTypeImperva, []string{"incapsula", "imperva"}},
 		{CaptchaTypeAwsWaf, []string{"aws-waf", "awswaf"}},
 		{CaptchaTypeDatadome, []string{"dd-challenge", "dd-top"}},
 		{CaptchaTypePerimeterX, []string{"_px3", "px-container"}},
 		{CaptchaTypeSmartCaptcha, []string{"smart-captcha", "smartcaptcha"}},
-		{CaptchaTypeArgon, []string{"argon-captcha", "argon"}},
+		{CaptchaTypeArgon, []string{"argon-captcha"}},
 		{CaptchaTypePuzzleCaptcha, []string{"puzzle-captcha", "__puzzle_captcha"}},
 		{CaptchaTypeYandex, []string{"smartcaptcha", "yandex-captcha"}},
 		{CaptchaTypeFuncaptcha, []string{"funcaptcha-container"}},
@@ -584,16 +583,21 @@ func detectByIframe(form *goquery.Selection) CaptchaType {
 }
 
 func hasGenericCaptchaMarkers(form *goquery.Selection) bool {
-	html, _ := form.Html()
-	htmlLower := strings.ToLower(html)
-
-	genericMarkers := []string{"captcha", "g-recaptcha", "h-captcha", "turnstile", "geetest"}
-	for _, m := range genericMarkers {
-		if strings.Contains(htmlLower, m) {
-			return true
+	found := false
+	form.Find("*").Each(func(_ int, s *goquery.Selection) {
+		if found {
+			return
 		}
-	}
-	return false
+		for _, attr := range []string{"id", "name", "class", "src"} {
+			if val, ok := s.Attr(attr); ok {
+				if strings.Contains(strings.ToLower(val), "captcha") {
+					found = true
+					return
+				}
+			}
+		}
+	})
+	return found
 }
 
 // DetectCaptchaInHTML performs a best-effort detection on a full HTML string.
