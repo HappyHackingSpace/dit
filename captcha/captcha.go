@@ -536,9 +536,6 @@ func detectByFieldNames(form *goquery.Selection) CaptchaType {
 		"simplecaptcha",
 		"captcha_code",
 		"captcha_input",
-		"verify_code",
-		"verification_code",
-		"security_code",
 		"text_captcha",
 		"captcha_result",
 	}
@@ -568,7 +565,7 @@ func detectByIframe(form *goquery.Selection) CaptchaType {
 		{CaptchaTypeHCaptcha, []string{"hcaptcha.com"}},
 		{CaptchaTypeTurnstile, []string{"cloudflare.com/turnstile"}},
 		{CaptchaTypeFuncaptcha, []string{"funcaptcha"}},
-		{CaptchaTypeYandex, []string{"yandex", "smartcaptcha"}},
+		{CaptchaTypeYandex, []string{"smartcaptcha.yandex", "captcha.yandex"}},
 	}
 
 	for _, entry := range iframePatterns {

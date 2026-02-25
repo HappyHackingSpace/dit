@@ -632,28 +632,28 @@ func TestOpenSourceCaptchaTypes(t *testing.T) {
 // TestYandexCaptchaDetection tests Yandex SmartCaptcha and regional deployment scenarios
 func TestYandexCaptchaDetection(t *testing.T) {
 	tests := []struct {
-		name        string
-		captcha     string
-		description string
-		deplyRegion string
+		name         string
+		captcha      string
+		description  string
+		deployRegion string
 	}{
 		{
-			name:        "yandex_smartcaptcha",
-			captcha:     "yandex",
-			description: "Yandex SmartCaptcha - Russian behavioral CAPTCHA",
-			deplyRegion: "russia",
+			name:         "yandex_smartcaptcha",
+			captcha:      "yandex",
+			description:  "Yandex SmartCaptcha - Russian behavioral CAPTCHA",
+			deployRegion: "russia",
 		},
 		{
-			name:        "yandex_global",
-			captcha:     "yandex",
-			description: "Yandex SmartCaptcha - Global deployment",
-			deplyRegion: "global",
+			name:         "yandex_global",
+			captcha:      "yandex",
+			description:  "Yandex SmartCaptcha - Global deployment",
+			deployRegion: "global",
 		},
 		{
-			name:        "yandex_enterprise",
-			captcha:     "yandex",
-			description: "Yandex SmartCaptcha - Enterprise use",
-			deplyRegion: "enterprise",
+			name:         "yandex_enterprise",
+			captcha:      "yandex",
+			description:  "Yandex SmartCaptcha - Enterprise use",
+			deployRegion: "enterprise",
 		},
 	}
 
