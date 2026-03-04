@@ -31,7 +31,18 @@ func (c *FormFieldClassifier) Classify(form *goquery.Selection, fields bool) Cla
 	formType := c.FormModel.Classify(form)
 	result := ClassifyResult{Form: formType}
 	if fields && c.FieldModel != nil {
-		result.Fields = c.FieldModel.Classify(form, formType)
+		allFields := c.FieldModel.Classify(form, formType)
+		// Exclude fields classified as "captcha" since captcha is now detected at page level.
+		// Only allocate the map when at least one non-captcha field exists so that
+		// encoding/json honours the omitempty tag.
+		for name, fieldType := range allFields {
+			if fieldType != "captcha" {
+				if result.Fields == nil {
+					result.Fields = make(map[string]string, len(allFields))
+				}
+				result.Fields[name] = fieldType
+			}
+		}
 	}
 	return result
 }
@@ -53,9 +64,23 @@ func (c *FormFieldClassifier) ClassifyProba(form *goquery.Selection, threshold f
 			}
 		}
 		fieldProba := c.FieldModel.ClassifyProba(form, bestFormType)
-		result.Fields = make(map[string]map[string]float64)
 		for name, probs := range fieldProba {
-			result.Fields[name] = thresholdMap(probs, threshold)
+			// Skip fields where captcha is the most likely classification
+			bestClass := ""
+			bestProb := -1.0
+			for cls, p := range probs {
+				if p > bestProb {
+					bestProb = p
+					bestClass = cls
+				}
+			}
+			if bestClass != "captcha" {
+				if result.Fields == nil {
+					result.Fields = make(map[string]map[string]float64, len(fieldProba))
+				}
+				thresholdedProbs := thresholdMap(probs, threshold)
+				result.Fields[name] = thresholdedProbs
+			}
 		}
 	}
 
@@ -76,15 +101,19 @@ func (c *FormFieldClassifier) ClassifyPageProba(doc *goquery.Document, threshold
 }
 
 // ExtractPage classifies both the page type and forms from HTML.
-func (c *FormFieldClassifier) ExtractPage(htmlStr string, proba bool, threshold float64, classifyFields bool) ([]FormResult, ClassifyResult, ClassifyProbaResult, error) {
+// It also returns the parsed form selections so callers can reuse
+// the already-parsed document (e.g. for CAPTCHA detection).
+func (c *FormFieldClassifier) ExtractPage(htmlStr string, proba bool, threshold float64, classifyFields bool) ([]FormResult, ClassifyResult, ClassifyProbaResult, []*goquery.Selection, error) {
 	doc, err := htmlutil.LoadHTMLString(htmlStr)
 	if err != nil {
-		return nil, ClassifyResult{}, ClassifyProbaResult{}, err
+		return nil, ClassifyResult{}, ClassifyProbaResult{}, nil, err
 	}
 
 	forms := htmlutil.GetForms(doc)
 	formResults := make([]FormResult, len(forms))
 	var classifyResults []ClassifyResult
+
+	// CAPTCHA detection intentionally omitted from the classifier.
 
 	for i, form := range forms {
 		formResults[i].FormHTML, _ = form.Html()
@@ -111,7 +140,7 @@ func (c *FormFieldClassifier) ExtractPage(htmlStr string, proba bool, threshold 
 		}
 	}
 
-	return formResults, pageResult, pageProba, nil
+	return formResults, pageResult, pageProba, forms, nil
 }
 
 // classifyFormsOnDoc runs form classification on all forms in a document.
@@ -125,10 +154,12 @@ func (c *FormFieldClassifier) classifyFormsOnDoc(doc *goquery.Document) []Classi
 }
 
 // ExtractForms extracts and classifies all forms from HTML.
-func (c *FormFieldClassifier) ExtractForms(htmlStr string, proba bool, threshold float64, classifyFields bool) ([]FormResult, error) {
+// It also returns the parsed form selections so callers can reuse
+// the already-parsed document (e.g. for CAPTCHA detection).
+func (c *FormFieldClassifier) ExtractForms(htmlStr string, proba bool, threshold float64, classifyFields bool) ([]FormResult, []*goquery.Selection, error) {
 	doc, err := htmlutil.LoadHTMLString(htmlStr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	forms := htmlutil.GetForms(doc)
@@ -143,7 +174,7 @@ func (c *FormFieldClassifier) ExtractForms(htmlStr string, proba bool, threshold
 		}
 	}
 
-	return results, nil
+	return results, forms, nil
 }
 
 // ExtractFormsFromReader extracts and classifies forms from an io.Reader.
