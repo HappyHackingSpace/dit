@@ -19,9 +19,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/happyhackingspace/dit/captcha"
 	"github.com/happyhackingspace/dit/classifier"
+	"github.com/happyhackingspace/dit/internal/htmlutil"
 )
 
 // Classifier wraps the form and field type classification models.
@@ -32,28 +32,28 @@ type Classifier struct {
 // FormResult holds the classification result for a single form.
 type FormResult struct {
 	Type    string            `json:"type"`
-	Captcha string            `json:"captcha,omitempty"`
+	Captcha string            `json:"captcha_type,omitempty"`
 	Fields  map[string]string `json:"fields,omitempty"`
 }
 
 // FormResultProba holds probability-based classification results for a single form.
 type FormResultProba struct {
 	Type    map[string]float64            `json:"type"`
-	Captcha string                        `json:"captcha,omitempty"`
+	Captcha string                        `json:"captcha_type,omitempty"`
 	Fields  map[string]map[string]float64 `json:"fields,omitempty"`
 }
 
 // PageResult holds the page type classification result.
 type PageResult struct {
 	Type    string       `json:"type"`
-	Captcha string       `json:"captcha,omitempty"`
+	Captcha string       `json:"captcha_type,omitempty"`
 	Forms   []FormResult `json:"forms,omitempty"`
 }
 
 // PageResultProba holds probability-based page type classification results.
 type PageResultProba struct {
 	Type    map[string]float64 `json:"type"`
-	Captcha string             `json:"captcha,omitempty"`
+	Captcha string             `json:"captcha_type,omitempty"`
 	Forms   []FormResultProba  `json:"forms,omitempty"`
 }
 
@@ -136,21 +136,25 @@ func (c *Classifier) ExtractForms(html string) ([]FormResult, error) {
 		return nil, fmt.Errorf("dit: classifier not initialized")
 	}
 
-	results, forms, err := c.fc.ExtractForms(html, false, 0, true)
+	results, err := c.fc.ExtractForms(html, false, 0, true)
 	if err != nil {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
 
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		return nil, fmt.Errorf("dit: %w", err)
+	}
+	forms := htmlutil.GetForms(doc)
+
 	out := make([]FormResult, len(results))
 	detector := &captcha.CaptchaDetector{}
 	for i, r := range results {
-		capType := captcha.CaptchaTypeNone
-		if i < len(forms) {
-			capType = detector.DetectInForm(forms[i])
-		}
 		capStr := ""
-		if capType != captcha.CaptchaTypeNone {
-			capStr = string(capType)
+		if i < len(forms) {
+			if ct := detector.DetectInForm(forms[i]); ct != captcha.CaptchaTypeNone {
+				capStr = string(ct)
+			}
 		}
 		out[i] = FormResult{
 			Type:    r.Result.Form,
@@ -168,21 +172,25 @@ func (c *Classifier) ExtractFormsProba(html string, threshold float64) ([]FormRe
 		return nil, fmt.Errorf("dit: classifier not initialized")
 	}
 
-	results, forms, err := c.fc.ExtractForms(html, true, threshold, true)
+	results, err := c.fc.ExtractForms(html, true, threshold, true)
 	if err != nil {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
 
+	doc, err := htmlutil.LoadHTMLString(html)
+	if err != nil {
+		return nil, fmt.Errorf("dit: %w", err)
+	}
+	forms := htmlutil.GetForms(doc)
+
 	out := make([]FormResultProba, len(results))
 	detector := &captcha.CaptchaDetector{}
 	for i, r := range results {
-		capType := captcha.CaptchaTypeNone
-		if i < len(forms) {
-			capType = detector.DetectInForm(forms[i])
-		}
 		capStr := ""
-		if capType != captcha.CaptchaTypeNone {
-			capStr = string(capType)
+		if i < len(forms) {
+			if ct := detector.DetectInForm(forms[i]); ct != captcha.CaptchaTypeNone {
+				capStr = string(ct)
+			}
 		}
 		out[i] = FormResultProba{
 			Type:    r.Proba.Form,
@@ -194,17 +202,19 @@ func (c *Classifier) ExtractFormsProba(html string, threshold float64) ([]FormRe
 }
 
 // detectPageCaptcha detects page-level CAPTCHA by first checking each form
-// (via CaptchaDetector.DetectInForm) and falling back to a full-HTML scan
-// (via captcha.DetectCaptchaInHTML).
-func detectPageCaptcha(htmlStr string, forms []*goquery.Selection) string {
-	detector := &captcha.CaptchaDetector{}
-	for _, f := range forms {
-		if ct := detector.DetectInForm(f); ct != captcha.CaptchaTypeNone {
-			return string(ct)
+// and falling back to a full-HTML scan.
+func detectPageCaptcha(htmlStr string) string {
+	doc, err := htmlutil.LoadHTMLString(htmlStr)
+	if err == nil {
+		detector := &captcha.CaptchaDetector{}
+		for _, f := range htmlutil.GetForms(doc) {
+			if ct := detector.DetectInForm(f); ct != captcha.CaptchaTypeNone {
+				return string(ct)
+			}
 		}
 	}
-	if pageCap := captcha.DetectCaptchaInHTML(htmlStr); pageCap != captcha.CaptchaTypeNone {
-		return string(pageCap)
+	if ct := captcha.DetectCaptchaInHTML(htmlStr); ct != captcha.CaptchaTypeNone {
+		return string(ct)
 	}
 	return ""
 }
@@ -218,7 +228,7 @@ func (c *Classifier) ExtractPageType(html string) (*PageResult, error) {
 		return nil, fmt.Errorf("dit: page model not available")
 	}
 
-	formResults, pageResult, _, parsedForms, err := c.fc.ExtractPage(html, false, 0, true)
+	formResults, pageResult, _, err := c.fc.ExtractPage(html, false, 0, true)
 	if err != nil {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
@@ -233,7 +243,7 @@ func (c *Classifier) ExtractPageType(html string) (*PageResult, error) {
 
 	return &PageResult{
 		Type:    pageResult.Form,
-		Captcha: detectPageCaptcha(html, parsedForms),
+		Captcha: detectPageCaptcha(html),
 		Forms:   forms,
 	}, nil
 }
@@ -247,7 +257,7 @@ func (c *Classifier) ExtractPageTypeProba(html string, threshold float64) (*Page
 		return nil, fmt.Errorf("dit: page model not available")
 	}
 
-	formResults, _, pageProba, parsedForms, err := c.fc.ExtractPage(html, true, threshold, true)
+	formResults, _, pageProba, err := c.fc.ExtractPage(html, true, threshold, true)
 	if err != nil {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
@@ -262,7 +272,7 @@ func (c *Classifier) ExtractPageTypeProba(html string, threshold float64) (*Page
 
 	return &PageResultProba{
 		Type:    pageProba.Form,
-		Captcha: detectPageCaptcha(html, parsedForms),
+		Captcha: detectPageCaptcha(html),
 		Forms:   forms,
 	}, nil
 }
