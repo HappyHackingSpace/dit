@@ -145,6 +145,11 @@ Cross-validation results (10-fold, grouped by domain):
 
 Trained on 1000+ annotated web forms and 754 annotated web pages.
 
+## Used By
+
+- [katana](https://github.com/projectdiscovery/katana) - A next-generation crawling and spidering framework
+- [httpx](https://github.com/projectdiscovery/httpx) - A fast and multi-purpose HTTP toolkit
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
