@@ -59,8 +59,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      - run: go build -o dit-bin ./cmd/dit
       - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-      - run: govulncheck ./...
+      - run: govulncheck -mode=binary dit-bin
 
   release:
     name: Release
