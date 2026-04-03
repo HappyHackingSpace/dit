@@ -9,7 +9,7 @@ It classifies pages (login, error, landing, blog, etc.), detects whether a form 
 ## Install
 
 ```bash
-go get github.com/happyhackingspace/dit
+go install github.com/happyhackingspace/dit/cmd/dit@latest
 ```
 
 ## Usage
