@@ -15,17 +15,22 @@
 package dit
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/happyhackingspace/dit/captcha"
 	"github.com/happyhackingspace/dit/classifier"
 	"github.com/happyhackingspace/dit/internal/htmlutil"
 )
+
+// downloadTimeout bounds the total time spent fetching the model.
+const downloadTimeout = 1 * time.Minute
 
 // ModelURL is the canonical download location for the pretrained model.
 const ModelURL = "https://huggingface.co/datasets/happyhackingspace/dit/resolve/main/model.json"
@@ -88,7 +93,13 @@ func Download(dest string) error {
 		return fmt.Errorf("create model dir: %w", err)
 	}
 
-	resp, err := http.Get(ModelURL)
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelURL, nil)
+	if err != nil {
+		return fmt.Errorf("download model: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download model: %w", err)
 	}
