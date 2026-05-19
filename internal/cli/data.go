@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/happyhackingspace/dit"
 	"github.com/spf13/cobra"
 )
 
@@ -115,8 +116,8 @@ func dataDownload(dataFolder string) error {
 	}
 	slog.Info("Training data extracted", "files", count, "folder", dataFolder)
 
-	slog.Info("Downloading model", "url", modelURL)
-	modelResp, err := http.Get(modelURL)
+	slog.Info("Downloading model", "url", dit.ModelURL)
+	modelResp, err := http.Get(dit.ModelURL)
 	if err != nil {
 		return fmt.Errorf("download model: %w", err)
 	}

@@ -19,8 +19,14 @@ go install github.com/happyhackingspace/dit/cmd/dit@latest
 ```go
 import "github.com/happyhackingspace/dit"
 
-// Load classifier (finds model.json automatically)
+// Load classifier. On first call, if no model.json is found in the current
+// directory (walked up to the nearest go.mod) or in ~/.dit/, the pretrained
+// model is downloaded from Hugging Face to ~/.dit/model.json (~93MB, one-time)
+// and reused on subsequent calls.
 c, _ := dit.New()
+
+// Or load an explicit file (no network, no search).
+c, _ := dit.Load("path/to/model.json")
 
 // Classify page type
 page, _ := c.ExtractPageType(htmlString)

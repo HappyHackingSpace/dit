@@ -15,14 +15,25 @@
 package dit
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/happyhackingspace/dit/captcha"
 	"github.com/happyhackingspace/dit/classifier"
 	"github.com/happyhackingspace/dit/internal/htmlutil"
 )
+
+// downloadTimeout bounds the total time spent fetching the model.
+const downloadTimeout = 1 * time.Minute
+
+// ModelURL is the canonical download location for the pretrained model.
+const ModelURL = "https://huggingface.co/datasets/happyhackingspace/dit/resolve/main/model.json"
 
 // Classifier wraps the form and field type classification models.
 type Classifier struct {
@@ -59,12 +70,62 @@ type PageResultProba struct {
 
 // New loads the classifier from "model.json", searching the current directory
 // and parent directories up to the module root, then ~/.dit/model.json.
+// If no model is found locally, it is downloaded from ModelURL to
+// ~/.dit/model.json and loaded from there. The download is a one-time cost
+// per machine; subsequent calls reuse the cached file.
 func New() (*Classifier, error) {
-	path, err := FindModel("model.json")
-	if err != nil {
+	if path, err := FindModel("model.json"); err == nil {
+		return Load(path)
+	}
+
+	dest := filepath.Join(ModelDir(), "model.json")
+	slog.Info("Model not found, downloading", "url", ModelURL, "dest", dest)
+	if err := Download(dest); err != nil {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
-	return Load(path)
+	return Load(dest)
+}
+
+// Download fetches the pretrained model from ModelURL and writes it to dest,
+// creating parent directories as needed. A partial file is removed on error.
+func Download(dest string) error {
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return fmt.Errorf("create model dir: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelURL, nil)
+	if err != nil {
+		return fmt.Errorf("download model: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("download model: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download model: HTTP %d", resp.StatusCode)
+	}
+
+	f, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create model file: %w", err)
+	}
+
+	written, err := io.Copy(f, resp.Body)
+	if err != nil {
+		_ = f.Close()
+		_ = os.Remove(dest)
+		return fmt.Errorf("download model: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close model file: %w", err)
+	}
+
+	slog.Info("Model downloaded", "size", fmt.Sprintf("%.1fMB", float64(written)/1024/1024))
+	return nil
 }
 
 // ModelDir returns the default model storage directory (~/.dit).

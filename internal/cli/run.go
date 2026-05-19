@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,8 +15,6 @@ import (
 	"github.com/happyhackingspace/dit"
 	"github.com/spf13/cobra"
 )
-
-const modelURL = "https://huggingface.co/datasets/happyhackingspace/dit/resolve/main/model.json"
 
 func (c *CLI) newRunCommand() *cobra.Command {
 	var modelPath string
@@ -93,7 +90,7 @@ func (c *CLI) newRunCommand() *cobra.Command {
 			slog.Debug("HTML fetched", "target", target, "bytes", len(htmlContent))
 
 			start := time.Now()
-			cl, err := loadOrDownloadModel(modelPath)
+			cl, err := loadModel(modelPath)
 			if err != nil {
 				return err
 			}
@@ -159,49 +156,12 @@ func isStdinTerminal() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func loadOrDownloadModel(modelPath string) (*dit.Classifier, error) {
+func loadModel(modelPath string) (*dit.Classifier, error) {
 	if modelPath != "" {
 		slog.Debug("Loading custom model", "path", modelPath)
 		return dit.Load(modelPath)
 	}
-
-	cl, err := dit.New()
-	if err == nil {
-		return cl, nil
-	}
-
-	dest := filepath.Join(dit.ModelDir(), "model.json")
-	slog.Info("Model not found, downloading", "url", modelURL, "dest", dest)
-
-	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-		return nil, fmt.Errorf("create model dir: %w", err)
-	}
-
-	resp, err := http.Get(modelURL)
-	if err != nil {
-		return nil, fmt.Errorf("download model: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download model: HTTP %d", resp.StatusCode)
-	}
-
-	f, err := os.Create(dest)
-	if err != nil {
-		return nil, fmt.Errorf("create model file: %w", err)
-	}
-
-	written, err := io.Copy(f, resp.Body)
-	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(dest)
-		return nil, fmt.Errorf("download model: %w", err)
-	}
-	_ = f.Close()
-
-	slog.Info("Model downloaded", "size", fmt.Sprintf("%.1fMB", float64(written)/1024/1024))
-	return dit.Load(dest)
+	return dit.New()
 }
 
 type fetchOptions struct {

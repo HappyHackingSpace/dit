@@ -65,7 +65,7 @@ func (c *CLI) selfUpdate() error {
 	modelDest := filepath.Join(dit.ModelDir(), "model.json")
 	if _, err := os.Stat(modelDest); err == nil {
 		slog.Info("Updating cached model")
-		modelResp, err := http.Get(modelURL)
+		modelResp, err := http.Get(dit.ModelURL)
 		if err == nil {
 			defer func() { _ = modelResp.Body.Close() }()
 			if modelResp.StatusCode == http.StatusOK {
