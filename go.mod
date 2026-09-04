@@ -3,7 +3,7 @@ module github.com/happyhackingspace/dit
 go 1.26
 
 require (
-	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/chromedp/chromedp v0.16.0
 	github.com/creativeprojects/go-selfupdate v1.6.0
 	github.com/spf13/cobra v1.10.2
@@ -14,7 +14,7 @@ require (
 	code.gitea.io/sdk/gitea v0.23.2 // indirect
 	github.com/42wim/httpsig v1.2.4 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
