@@ -2,6 +2,8 @@ module github.com/happyhackingspace/dit
 
 go 1.26.0
 
+toolchain go1.26.9
+
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/chromedp/chromedp v0.16.0
