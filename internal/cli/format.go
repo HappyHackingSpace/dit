@@ -126,7 +126,7 @@ func outputFormResults(w io.Writer, format string, results []dit.FormResult) err
 		return writeCSV(w, resultHeader, formResultRows(results))
 	default:
 		output, _ := json.MarshalIndent(results, "", "  ")
-		fmt.Fprintln(w, string(output))
-		return nil
+		_, err := fmt.Fprintln(w, string(output))
+		return err
 	}
 }
