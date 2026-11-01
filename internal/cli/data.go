@@ -117,26 +117,9 @@ func dataDownload(dataFolder string) error {
 	slog.Info("Training data extracted", "files", count, "folder", dataFolder)
 
 	slog.Info("Downloading model", "url", dit.ModelURL)
-	modelResp, err := http.Get(dit.ModelURL)
-	if err != nil {
-		return fmt.Errorf("download model: %w", err)
+	if err := dit.Download("model.json"); err != nil {
+		return err
 	}
-	defer func() { _ = modelResp.Body.Close() }()
-	if modelResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download model: HTTP %d", modelResp.StatusCode)
-	}
-
-	mf, err := os.Create("model.json")
-	if err != nil {
-		return fmt.Errorf("create model.json: %w", err)
-	}
-	written, err := io.Copy(mf, modelResp.Body)
-	if err != nil {
-		_ = mf.Close()
-		return fmt.Errorf("write model.json: %w", err)
-	}
-	_ = mf.Close()
-	slog.Info("Model downloaded", "size", fmt.Sprintf("%.1fMB", float64(written)/1024/1024))
 
 	return nil
 }
