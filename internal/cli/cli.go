@@ -53,6 +53,7 @@ func (c *CLI) setupCommands() {
 	c.rootCmd.AddCommand(c.newEvaluateCommand())
 	c.rootCmd.AddCommand(c.newUpCommand())
 	c.rootCmd.AddCommand(c.newDataCommand())
+	c.rootCmd.AddCommand(c.newModelCommand())
 }
 
 // Run executes the CLI and returns any error.

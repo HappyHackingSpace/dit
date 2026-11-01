@@ -66,6 +66,15 @@ dit run login.html
 # With probabilities
 dit run https://github.com/login --proba
 
+# Download the pretrained model to the cache (~/.dit/model.json)
+dit model pull
+
+# Show the cached model's path, size, and SHA-256 checksum
+dit model status
+
+# Remove the cached model
+dit model rm
+
 # Download training data and model from Hugging Face
 dit data download
 

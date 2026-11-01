@@ -3,11 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
-	"path/filepath"
 
 	"github.com/creativeprojects/go-selfupdate"
 	"github.com/happyhackingspace/dit"
@@ -62,21 +59,13 @@ func (c *CLI) selfUpdate() error {
 	fmt.Printf("Updated to %s\n", latest.Version())
 
 	// Also refresh cached model
-	modelDest := filepath.Join(dit.ModelDir(), "model.json")
+	modelDest := dit.DefaultModelPath()
 	if _, err := os.Stat(modelDest); err == nil {
 		slog.Info("Updating cached model")
-		modelResp, err := http.Get(dit.ModelURL)
-		if err == nil {
-			defer func() { _ = modelResp.Body.Close() }()
-			if modelResp.StatusCode == http.StatusOK {
-				if err := os.MkdirAll(filepath.Dir(modelDest), 0755); err == nil {
-					if f, err := os.Create(modelDest); err == nil {
-						_, _ = io.Copy(f, modelResp.Body)
-						_ = f.Close()
-						slog.Info("Model updated")
-					}
-				}
-			}
+		if err := dit.Download(modelDest); err != nil {
+			slog.Warn("Model update failed", "error", err)
+		} else {
+			slog.Info("Model updated")
 		}
 	}
 

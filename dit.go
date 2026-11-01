@@ -16,12 +16,15 @@ package dit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/happyhackingspace/dit/captcha"
@@ -30,10 +33,20 @@ import (
 )
 
 // downloadTimeout bounds the total time spent fetching the model.
-const downloadTimeout = 1 * time.Minute
+// The model is ~93MB, so allow for slow connections.
+const downloadTimeout = 10 * time.Minute
 
 // ModelURL is the canonical download location for the pretrained model.
 const ModelURL = "https://huggingface.co/datasets/happyhackingspace/dit/resolve/main/model.json"
+
+// ModelSHA256 is the pinned hex-encoded SHA-256 checksum of the model served
+// at ModelURL. When non-empty, Download verifies the fetched file against it
+// and fails on mismatch.
+//
+// TODO: pin the published checksum of model.json. While empty, verification
+// is skipped: the computed checksum is logged with a warning instead so it
+// can be copied here.
+const ModelSHA256 = ""
 
 // Classifier wraps the form and field type classification models.
 type Classifier struct {
@@ -78,8 +91,8 @@ func New() (*Classifier, error) {
 		return Load(path)
 	}
 
-	dest := filepath.Join(ModelDir(), "model.json")
-	slog.Info("Model not found, downloading", "url", ModelURL, "dest", dest)
+	dest := DefaultModelPath()
+	slog.Info("Model not found, downloading", "url", ModelURL, "dest", dest, "size", "~93MB")
 	if err := Download(dest); err != nil {
 		return nil, fmt.Errorf("dit: %w", err)
 	}
@@ -87,45 +100,138 @@ func New() (*Classifier, error) {
 }
 
 // Download fetches the pretrained model from ModelURL and writes it to dest,
-// creating parent directories as needed. A partial file is removed on error.
+// creating parent directories as needed. Progress is reported to stderr. The
+// file is written to a temporary path and renamed into place only after the
+// download completes and, when ModelSHA256 is set, its checksum matches, so
+// a partial or corrupt file is never left at dest.
 func Download(dest string) error {
-	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-		return fmt.Errorf("create model dir: %w", err)
+	_, err := downloadModel(ModelURL, dest, ModelSHA256, os.Stderr)
+	return err
+}
+
+// downloadModel fetches url into dest, streaming progress to progress and
+// returning the hex-encoded SHA-256 checksum of the downloaded file. When
+// pinnedSHA256 is non-empty the checksum must match or the download fails;
+// when empty, the computed checksum is logged with a warning.
+func downloadModel(url, dest, pinnedSHA256 string, progress io.Writer) (string, error) {
+	dir := filepath.Dir(dest)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("create model dir: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return fmt.Errorf("download model: %w", err)
+		return "", fmt.Errorf("download model: %w", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("download model: %w", err)
+		return "", fmt.Errorf("download model: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download model: HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("download model: HTTP %d", resp.StatusCode)
 	}
 
-	f, err := os.Create(dest)
+	tmp, err := os.CreateTemp(dir, filepath.Base(dest)+".*.partial")
 	if err != nil {
-		return fmt.Errorf("create model file: %w", err)
+		return "", fmt.Errorf("create model file: %w", err)
 	}
 
-	written, err := io.Copy(f, resp.Body)
+	hash := sha256.New()
+	pw := newProgressWriter(progress, resp.ContentLength)
+	written, err := io.Copy(io.MultiWriter(tmp, hash, pw), resp.Body)
+	pw.finish()
 	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(dest)
-		return fmt.Errorf("download model: %w", err)
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return "", fmt.Errorf("download model: %w", err)
 	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close model file: %w", err)
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return "", fmt.Errorf("close model file: %w", err)
 	}
 
-	slog.Info("Model downloaded", "size", fmt.Sprintf("%.1fMB", float64(written)/1024/1024))
-	return nil
+	sum := hex.EncodeToString(hash.Sum(nil))
+	switch {
+	case pinnedSHA256 == "":
+		slog.Warn("No pinned model checksum; skipping verification", "sha256", sum)
+	case !strings.EqualFold(sum, pinnedSHA256):
+		_ = os.Remove(tmp.Name())
+		return "", fmt.Errorf("model checksum mismatch: got %s, want %s", sum, pinnedSHA256)
+	}
+
+	if err := os.Rename(tmp.Name(), dest); err != nil {
+		_ = os.Remove(tmp.Name())
+		return "", fmt.Errorf("move model file: %w", err)
+	}
+
+	slog.Info("Model downloaded", "size", fmt.Sprintf("%.1fMB", float64(written)/1024/1024), "sha256", sum)
+	return sum, nil
+}
+
+// progressWriter reports byte-count progress to an io.Writer as data passes
+// through it.
+type progressWriter struct {
+	w       io.Writer
+	total   int64
+	written int64
+	lastAt  time.Time
+}
+
+// progressInterval throttles progress updates.
+const progressInterval = 200 * time.Millisecond
+
+func newProgressWriter(w io.Writer, total int64) *progressWriter {
+	return &progressWriter{w: w, total: total}
+}
+
+// Write implements io.Writer and never fails.
+func (p *progressWriter) Write(b []byte) (int, error) {
+	p.written += int64(len(b))
+	if time.Since(p.lastAt) >= progressInterval {
+		p.report()
+	}
+	return len(b), nil
+}
+
+func (p *progressWriter) report() {
+	if p.w == nil {
+		return
+	}
+	p.lastAt = time.Now()
+	mb := float64(p.written) / 1024 / 1024
+	if p.total > 0 {
+		pct := float64(p.written) / float64(p.total) * 100
+		_, _ = fmt.Fprintf(p.w, "\rDownloading model: %.1f/%.1f MB (%.0f%%)", mb, float64(p.total)/1024/1024, pct)
+	} else {
+		_, _ = fmt.Fprintf(p.w, "\rDownloading model: %.1f MB", mb)
+	}
+}
+
+// finish prints the final progress line followed by a newline.
+func (p *progressWriter) finish() {
+	if p.w == nil {
+		return
+	}
+	p.report()
+	_, _ = fmt.Fprintln(p.w)
+}
+
+// FileSHA256 returns the hex-encoded SHA-256 checksum of the file at path.
+func FileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // ModelDir returns the default model storage directory (~/.dit).
@@ -135,6 +241,13 @@ func ModelDir() string {
 		return ""
 	}
 	return filepath.Join(home, ".dit")
+}
+
+// DefaultModelPath returns the default cached model location
+// (~/.dit/model.json), the destination of implicit first-run downloads and
+// of "dit model pull".
+func DefaultModelPath() string {
+	return filepath.Join(ModelDir(), "model.json")
 }
 
 // FindModel searches for a model file by name.
