@@ -164,6 +164,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Go port of [Formasaurus](https://github.com/scrapinghub/Formasaurus).
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=HappyHackingSpace/dit&type=Date)](https://star-history.com/#HappyHackingSpace/dit&Date)
+
 ## License
 
 [MIT](LICENSE)
