@@ -77,9 +77,13 @@ func formRows(pageType, captcha string, index int, f dit.FormResult) [][]string 
 // writeTable writes header and rows as an aligned text table.
 func writeTable(w io.Writer, header []string, rows [][]string) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, strings.ToUpper(strings.Join(header, "\t")))
+	if _, err := fmt.Fprintln(tw, strings.ToUpper(strings.Join(header, "\t"))); err != nil {
+		return err
+	}
 	for _, row := range rows {
-		fmt.Fprintln(tw, strings.Join(row, "\t"))
+		if _, err := fmt.Fprintln(tw, strings.Join(row, "\t")); err != nil {
+			return err
+		}
 	}
 	return tw.Flush()
 }
@@ -108,8 +112,8 @@ func outputPageResult(w io.Writer, format string, r *dit.PageResult) error {
 		return writeCSV(w, resultHeader, pageResultRows(r))
 	default:
 		output, _ := json.MarshalIndent(r, "", "  ")
-		fmt.Fprintln(w, string(output))
-		return nil
+		_, err := fmt.Fprintln(w, string(output))
+		return err
 	}
 }
 
