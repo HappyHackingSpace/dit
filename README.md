@@ -63,6 +63,10 @@ dit run https://github.com/login
 # Classify forms in a local file
 dit run login.html
 
+# Batch mode: classify URLs listed in a file (one per line),
+# streaming one JSON result per line
+dit run --list urls.txt
+
 # With probabilities
 dit run https://github.com/login --proba
 
