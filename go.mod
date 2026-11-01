@@ -2,7 +2,7 @@ module github.com/happyhackingspace/dit
 
 go 1.26.0
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
