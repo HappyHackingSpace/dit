@@ -24,7 +24,7 @@ func (c *CLI) newRunCommand() *cobra.Command {
 	var renderTimeout int
 
 	cmd := &cobra.Command{
-		Use:   "run [url-or-file]",
+		Use:   "run [url-or-file|-]",
 		Short: "Classify page type and forms in a URL, HTML file, or stdin",
 		Args:  cobra.MaximumNArgs(1),
 		Example: `  # Classify a URL directly
@@ -35,6 +35,9 @@ func (c *CLI) newRunCommand() *cobra.Command {
 
   # Pipe HTML content from a file
   cat login.html | dit run
+
+  # Read HTML from stdin explicitly with "-"
+  curl -s https://github.com/login | dit run -
 
   # Pipe a URL from stdin
   echo "https://github.com/login" | dit run
@@ -68,8 +71,11 @@ func (c *CLI) newRunCommand() *cobra.Command {
 				timeout: time.Duration(renderTimeout) * time.Second,
 			}
 
-			if len(args) == 0 {
+			if len(args) == 0 || args[0] == "-" {
 				if isStdinTerminal() {
+					if len(args) == 1 {
+						return fmt.Errorf(`no input on stdin: pipe HTML or a URL when using "-"`)
+					}
 					return cmd.Help()
 				}
 				htmlContent, target, err = readFromStdin(fetchOpts)
@@ -237,7 +243,14 @@ func isURL(target string) bool {
 
 func readFromStdin(opts fetchOptions) (string, string, error) {
 	slog.Debug("Reading from stdin")
-	body, err := io.ReadAll(os.Stdin)
+	return readInput(os.Stdin, opts)
+}
+
+// readInput reads HTML content or a URL from r. It returns the HTML content
+// and the target it came from: the URL itself when r holds a URL, "stdin"
+// otherwise.
+func readInput(r io.Reader, opts fetchOptions) (string, string, error) {
+	body, err := io.ReadAll(r)
 	if err != nil {
 		return "", "", fmt.Errorf("read stdin: %w", err)
 	}

@@ -63,6 +63,9 @@ dit run https://github.com/login
 # Classify forms in a local file
 dit run login.html
 
+# Read HTML from stdin ("-" reads stdin explicitly)
+curl -s https://github.com/login | dit run -
+
 # With probabilities
 dit run https://github.com/login --proba
 

@@ -64,6 +64,38 @@ func TestFunctional_RunStdin(t *testing.T) {
 	}
 }
 
+func TestFunctional_RunStdinDash(t *testing.T) {
+	binary := buildBinary(t)
+
+	// Simulating: curl https://example.com | dit run -
+	cmd := exec.Command(binary, "run", "-s", "-")
+	cmd.Stdin = strings.NewReader(loginFormHTML)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Functional dash test failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	// Output can be either page+forms object or just forms array
+	var pageResult struct {
+		Type  string `json:"type"`
+		Forms []struct {
+			Type   string            `json:"type"`
+			Fields map[string]string `json:"fields"`
+		} `json:"forms"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &pageResult); err != nil {
+		t.Fatalf("Output is not valid JSON: %v\nOutput: %s", err, stdout.String())
+	}
+
+	if len(pageResult.Forms) == 0 {
+		t.Fatal("No forms found in output")
+	}
+}
+
 func TestFunctional_RunStdinURL(t *testing.T) {
 	binary := buildBinary(t)
 
