@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,7 @@ func (c *CLI) newRunCommand() *cobra.Command {
 	var proba bool
 	var render bool
 	var renderTimeout int
+	var list string
 
 	cmd := &cobra.Command{
 		Use:   "run [url-or-file]",
@@ -41,6 +43,9 @@ func (c *CLI) newRunCommand() *cobra.Command {
 
   # Pipe HTML content from a URL using curl
   curl -s https://github.com/login | dit run
+
+  # Batch mode: classify URLs listed in a file (one per line)
+  dit run --list urls.txt
 
   # Show probability scores
   dit run https://github.com/login --proba
@@ -66,6 +71,16 @@ func (c *CLI) newRunCommand() *cobra.Command {
 			fetchOpts := fetchOptions{
 				render:  render,
 				timeout: time.Duration(renderTimeout) * time.Second,
+			}
+
+			if list != "" {
+				if len(args) > 0 {
+					return fmt.Errorf("cannot combine --list with a positional argument")
+				}
+				if fetchOpts.render && renderTimeout <= 0 {
+					return fmt.Errorf("--timeout must be a positive integer")
+				}
+				return runBatch(list, modelPath, fetchOpts, proba, threshold)
 			}
 
 			if len(args) == 0 {
@@ -145,7 +160,99 @@ func (c *CLI) newRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&proba, "proba", false, "Show probabilities")
 	cmd.Flags().BoolVar(&render, "render", false, "Render JavaScript-driven pages in a headless browser")
 	cmd.Flags().IntVar(&renderTimeout, "timeout", 30, "Render browser timeout in seconds")
+	cmd.Flags().StringVar(&list, "list", "", "File with URLs to classify, one per line (batch mode)")
 	return cmd
+}
+
+// batchResult is one line of batch output, streamed as newline-delimited JSON.
+type batchResult struct {
+	URL   string `json:"url"`
+	Page  any    `json:"page,omitempty"`
+	Forms any    `json:"forms,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// runBatch classifies every URL in the list file and streams one JSON result
+// per line to stdout. Fetch and classification errors are reported per URL
+// without stopping the batch.
+func runBatch(listPath, modelPath string, opts fetchOptions, proba bool, threshold float64) error {
+	f, err := os.Open(listPath)
+	if err != nil {
+		return fmt.Errorf("open list file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	urls, err := readURLList(f)
+	if err != nil {
+		return fmt.Errorf("read list file: %w", err)
+	}
+	if len(urls) == 0 {
+		return fmt.Errorf("no URLs found in %s", listPath)
+	}
+
+	start := time.Now()
+	cl, err := loadModel(modelPath)
+	if err != nil {
+		return err
+	}
+	slog.Debug("Model loaded", "duration", time.Since(start))
+
+	enc := json.NewEncoder(os.Stdout)
+	for _, target := range urls {
+		res := batchResult{URL: target}
+		slog.Debug("Fetching HTML", "target", target, "render", opts.render)
+		htmlContent, err := fetchHTML(target, opts)
+		if err != nil {
+			res.Error = err.Error()
+		} else if res.Page, res.Forms, err = classifyTarget(cl, htmlContent, proba, threshold); err != nil {
+			res.Error = err.Error()
+		}
+		if err := enc.Encode(res); err != nil {
+			return fmt.Errorf("write result: %w", err)
+		}
+	}
+	return nil
+}
+
+// readURLList reads one URL per line from r, skipping blank lines and lines
+// starting with "#".
+func readURLList(r io.Reader) ([]string, error) {
+	var urls []string
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		urls = append(urls, line)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return urls, nil
+}
+
+// classifyTarget classifies HTML content, returning the page result or, when
+// the page model is unavailable, the form results.
+func classifyTarget(cl *dit.Classifier, htmlContent string, proba bool, threshold float64) (page, forms any, err error) {
+	if proba {
+		if pageResult, pageErr := cl.ExtractPageTypeProba(htmlContent, threshold); pageErr == nil {
+			return pageResult, nil, nil
+		}
+		results, err := cl.ExtractFormsProba(htmlContent, threshold)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, results, nil
+	}
+	if pageResult, pageErr := cl.ExtractPageType(htmlContent); pageErr == nil {
+		return pageResult, nil, nil
+	}
+	results, err := cl.ExtractForms(htmlContent)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nil, results, nil
 }
 
 func isStdinTerminal() bool {
