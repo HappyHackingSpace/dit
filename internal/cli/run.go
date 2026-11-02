@@ -22,6 +22,7 @@ func (c *CLI) newRunCommand() *cobra.Command {
 	var proba bool
 	var render bool
 	var renderTimeout int
+	var format string
 
 	cmd := &cobra.Command{
 		Use:   "run [url-or-file]",
@@ -51,6 +52,10 @@ func (c *CLI) newRunCommand() *cobra.Command {
   # Use custom model file
   dit run login.html --model custom.json
 
+  # Output as an aligned table or CSV instead of JSON
+  dit run https://github.com/login --format table
+  dit run https://github.com/login --format csv
+
   # Render JavaScript-heavy pages
   dit run https://github.com/login --render
 
@@ -60,6 +65,13 @@ func (c *CLI) newRunCommand() *cobra.Command {
   # Verbose mode with debug output
   dit run https://github.com/login -v`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !validFormat(format) {
+				return fmt.Errorf("invalid --format %q (supported: json, table, csv)", format)
+			}
+			if proba && format != formatJSON {
+				return fmt.Errorf("--format %s is not supported with --proba (use --format json)", format)
+			}
+
 			var htmlContent string
 			var target string
 			var err error
@@ -120,21 +132,18 @@ func (c *CLI) newRunCommand() *cobra.Command {
 				pageResult, pageErr := cl.ExtractPageType(htmlContent)
 				if pageErr == nil {
 					slog.Debug("Page+form classification completed", "duration", time.Since(start))
-					output, _ := json.MarshalIndent(pageResult, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					results, err := cl.ExtractForms(htmlContent)
-					if err != nil {
-						return err
-					}
-					slog.Debug("Form classification completed", "forms", len(results), "duration", time.Since(start))
-					if len(results) == 0 {
-						fmt.Println("No forms found.")
-						return nil
-					}
-					output, _ := json.MarshalIndent(results, "", "  ")
-					fmt.Println(string(output))
+					return outputPageResult(os.Stdout, format, pageResult)
 				}
+				results, err := cl.ExtractForms(htmlContent)
+				if err != nil {
+					return err
+				}
+				slog.Debug("Form classification completed", "forms", len(results), "duration", time.Since(start))
+				if len(results) == 0 {
+					fmt.Println("No forms found.")
+					return nil
+				}
+				return outputFormResults(os.Stdout, format, results)
 			}
 			return nil
 		},
@@ -145,6 +154,7 @@ func (c *CLI) newRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&proba, "proba", false, "Show probabilities")
 	cmd.Flags().BoolVar(&render, "render", false, "Render JavaScript-driven pages in a headless browser")
 	cmd.Flags().IntVar(&renderTimeout, "timeout", 30, "Render browser timeout in seconds")
+	cmd.Flags().StringVar(&format, "format", formatJSON, "Output format: json, table, or csv")
 	return cmd
 }
 

@@ -66,6 +66,10 @@ dit run login.html
 # With probabilities
 dit run https://github.com/login --proba
 
+# Choose output format: json (default), table, or csv
+dit run https://github.com/login --format table
+dit run https://github.com/login --format csv
+
 # Download training data and model from Hugging Face
 dit data download
 
